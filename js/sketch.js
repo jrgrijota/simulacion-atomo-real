@@ -74,6 +74,15 @@ let clickIndex = 0; // 0 = solo el núcleo, sin saltos todavía
 let nucleonLayoutCache = null; // posiciones (relativas, radio unidad) cacheadas por elemento
 let shellAngles = []; // ángulo actual del electrón en cada capa (animación)
 
+// Escala de la ESCALERA de comparación (DOM, no el diagrama). Empieza en
+// BASE_PX (núcleo cómodo de ver) y, la PRIMERA vez que una línea nueva no
+// cabe en el ancho visible, se reduce de una vez para siempre a 1px: a
+// partir de ahí todas las líneas se dibujan a escala real (×10 exacto,
+// sin más compresión) y el contenedor scrollea horizontalmente lo que
+// haga falta. Ese scroll larguísimo es deliberado: es lo que transmite
+// la distancia real entre el núcleo y el átomo completo.
+let ladderScalePx = BASE_PX;
+
 const uiCache = { theme: "dark" };
 let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría del diagrama, recalculada en resize
 
@@ -188,13 +197,33 @@ function recomputeLayout() {
   diagramMaxRadiusPx = Math.max(20, Math.min(width, height) / 2 - 28);
 }
 
+// Diámetro real (m) del elemento más grande actualmente dibujado: la capa
+// revelada más externa, o el núcleo si todavía no se ha revelado ninguna.
+function largestVisibleDiameterM(el, revealed) {
+  let maxD = el.nucleusDiameterM;
+  el.shellDiametersM.forEach((d, s) => { if (revealed.has(s) && d > maxD) maxD = d; });
+  return maxD;
+}
+
+// k calibrado a un LARGO REAL arbitrario (no al valor abstracto del salto ×10):
+// así el diagrama siempre aprovecha el espacio disponible en vez de quedar
+// minúsculo cuando el salto "se pasa" del tamaño de la capa que en realidad
+// se está dibujando (algo muy frecuente: varias capas caben en un mismo salto).
+function computeKForLength(el, lengthM, maxPx) {
+  const rawPx = realToRawPx(el, lengthM);
+  let k = 0;
+  while (rawPx / Math.pow(10, k) > maxPx && k < 30) k++;
+  return k;
+}
+
 function draw() {
   const theme = uiCache.theme;
   background(theme === "light" ? [248, 250, 252] : theme === "high-contrast" ? [0, 0, 0] : [11, 12, 16]);
 
   const el = getElement();
-  const k = computeK(el, clickIndex, diagramMaxRadiusPx * 2);
   const { revealed } = buildRevealMap(el, clickIndex);
+  const maxVisibleM = largestVisibleDiameterM(el, revealed);
+  const k = computeKForLength(el, maxVisibleM, diagramMaxRadiusPx * 2);
 
   drawShellOrbits(theme, el, revealed, k);
   drawNucleus(theme, el, k);
@@ -366,16 +395,28 @@ function renderLadder() {
   const section = document.getElementById("ladder-section");
   if (clickIndex === 0) {
     section.innerHTML = '<p class="ladder-empty">Pulsa "Quitar zoom" para empezar a comparar tamaños.</p>';
+    ladderScalePx = BASE_PX; // por si se vuelve a 0 desde "reiniciar"
     return;
   }
-  const trackBudgetPx = Math.max(160, (section.clientWidth || 700) - 360); // ancho disponible aprox. de cada barra
-  const k = computeK(el, clickIndex, trackBudgetPx);
+
+  // ¿La línea que se acaba de añadir sigue cabiendo, a la escala "cómoda"
+  // actual, en el ancho visible (sin contar la etiqueta fija de la izquierda)?
+  // Si no cabe Y todavía no hemos reducido nunca, se reduce la PRIMERA línea
+  // a 1px de una vez para siempre: desde ahí todo se dibuja a escala real
+  // (×10 exacto) y el contenedor scrollea en horizontal lo que haga falta.
+  const labelColPx = 160;
+  const visibleBudgetPx = Math.max(120, (section.clientWidth || 700) - labelColPx);
+  const newestRawPx = ladderScalePx * Math.pow(10, clickIndex);
+  if (ladderScalePx === BASE_PX && newestRawPx > visibleBudgetPx) {
+    ladderScalePx = 1;
+  }
+
   const { revealAt } = buildRevealMap(el, clickIndex);
 
   let html = "";
   for (let i = 0; i <= clickIndex; i++) {
     const diamM = lineDiameterM(el, i);
-    const displayPx = Math.max(realToDisplayPx(el, diamM, k), 1.5);
+    const barPx = Math.max(ladderScalePx * Math.pow(10, i), 1);
     const shellsHere = revealAt[i] || [];
     // Nota: variable nombrada "barColor" a propósito (no "color") para no
     // ensombrear la función global color() de p5 dentro de este archivo.
@@ -395,11 +436,12 @@ function renderLadder() {
       '<span class="ladder-row-label"><span class="ladder-row-swatch" style="background:' + rgbStr(barColor) + '"></span>' +
       (i === 0 ? "Núcleo" : "×10" + toSuperscript(i) + (shellsHere.length ? ' <span class="ladder-row-shells">→ ' + shellLabel + "</span>" : "")) +
       "</span>" +
-      '<span class="ladder-row-track"><span class="ladder-row-bar" style="width:' + displayPx + "px; background:" + rgbStr(barColor) + ';"></span></span>' +
+      '<span class="ladder-row-bar" style="width:' + barPx + "px; background:" + rgbStr(barColor) + ';"></span>' +
       '<span class="ladder-row-value">' + formatLength(diamM) + "</span>" +
       "</div>";
   }
   section.innerHTML = html;
+  section.scrollLeft = section.scrollWidth; // salta directamente a ver la línea más nueva
 }
 
 function refreshAll() {
@@ -415,6 +457,7 @@ function refreshAll() {
 function resetJourney() {
   clickIndex = 0;
   shellAngles = [];
+  ladderScalePx = BASE_PX;
   refreshAll();
 }
 
