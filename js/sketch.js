@@ -95,6 +95,23 @@ function toSuperscript(n) {
   return String(n).split("").map((ch) => SUPERSCRIPT_MAP[ch] !== undefined ? SUPERSCRIPT_MAP[ch] : ch).join("");
 }
 
+// Expresa un número grande como "N veces" (coloquial) o "m × 10^n veces" (científico).
+function formatTimes(ratio) {
+  if (!isFinite(ratio) || ratio <= 0) return "—";
+  if (ratio < 1000) {
+    const r = Math.round(ratio * 10) / 10;
+    return (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1).replace(".", ",")) + " veces";
+  }
+  const exp = Math.floor(Math.log10(ratio));
+  const mantissa = ratio / Math.pow(10, exp);
+  return mantissa.toFixed(2).replace(".", ",") + " × 10" + toSuperscript(exp) + " veces";
+}
+
+// Formatea un número de píxeles con separador de miles en es-ES.
+function formatPx(px) {
+  return Math.round(px).toLocaleString("es-ES") + " px";
+}
+
 function formatSig(value, sig) {
   if (value === 0) return "0";
   const rounded = parseFloat(value.toPrecision(sig));
@@ -213,6 +230,58 @@ function draw() {
   drawShellOrbits(theme, el, revealed, k);
   drawNucleus(theme, el, k);
   drawJourneyLabel(theme, el, k);
+  if (clickIndex >= 1) drawScaleBridge(theme, el, revealed, k);
+}
+
+// =====================================================================
+// Puente de escalas: conecta lo dibujado en el diagrama (escala "cómoda",
+// calibrada por k) con la barra real correspondiente en la franja de
+// scroll de abajo (escala real, anclada al núcleo=1px tras el disparo).
+// Es la pieza que responde a "¿qué es, en la barra de abajo, esto que
+// estoy viendo aquí arriba?".
+// =====================================================================
+
+// Salto (índice) en el que una capa concreta queda revelada por primera vez.
+function revealRowIndexForShell(el, s) {
+  let i = 0;
+  while (lineDiameterM(el, i) < el.shellDiametersM[s] && i < 30) i++;
+  return i;
+}
+
+// El elemento más grande actualmente dibujado: la capa revelada más externa,
+// o el núcleo si todavía no se ha revelado ninguna capa.
+function getFocusBoundary(el, revealed) {
+  let best = { kind: "nucleus", diamM: el.nucleusDiameterM, rowIndex: 0, colorEntry: NUCLEUS_COLOR, label: "Núcleo" };
+  el.shellDiametersM.forEach((d, s) => {
+    if (revealed.has(s) && d > best.diamM) {
+      best = { kind: "shell", diamM: d, rowIndex: revealRowIndexForShell(el, s), colorEntry: SHELL_COLORS[s % SHELL_COLORS.length], label: "Capa " + SHELL_NAMES[s] };
+    }
+  });
+  return best;
+}
+
+function drawScaleBridge(theme, el, revealed, k) {
+  const focus = getFocusBoundary(el, revealed);
+  const diagramPx = realToDisplayPx(el, focus.diamM, k);
+  // Ancho real (px) que esa misma frontera ocupa AHORA MISMO en la franja de
+  // scroll, con la escala vigente de la escalera (ladderScalePx).
+  const scrollBarPx = ladderScalePx * Math.pow(10, focus.rowIndex);
+  const col = categoryColor(focus.colorEntry);
+
+  const halfW = Math.max(diagramPx / 2, 6); // mínimo visible aunque el círculo sea sub-píxel
+  const y = diagramCy + Math.max(diagramPx / 2, 10) + 16;
+  if (y + 34 > height - 6) return; // sin espacio: se omite antes que solaparse con el borde
+
+  push();
+  stroke(col[0], col[1], col[2]);
+  strokeWeight(1.4);
+  line(diagramCx - halfW, y, diagramCx + halfW, y);
+  line(diagramCx - halfW, y - 5, diagramCx - halfW, y + 5);
+  line(diagramCx + halfW, y - 5, diagramCx + halfW, y + 5);
+  pop();
+
+  const caption = "↕ " + focus.label + " = barra ×10" + toSuperscript(focus.rowIndex) + " de abajo (" + formatPx(scrollBarPx) + ")";
+  drawCaption(theme, diagramCx, y + 8, caption, col, CENTER, Math.max(220, diagramPx + 40));
 }
 
 // =====================================================================
@@ -253,17 +322,29 @@ function getNucleonLayout(el) {
 
 const NUCLEUS_DETAIL_MIN_PX = 10; // por debajo de este diámetro, se dibuja como punto único
 
+// Devuelve el diámetro REAL (sin forzar mínimos) del núcleo en el diagrama,
+// para que otras funciones (p.ej. el puente de escalas) sepan su tamaño exacto.
+function nucleusDiamPx(el, k) { return realToDisplayPx(el, el.nucleusDiameterM, k); }
+
 function drawNucleus(theme, el, k) {
-  const diamPx = Math.max(realToDisplayPx(el, el.nucleusDiameterM, k), 0.4);
+  const trueDiamPx = nucleusDiamPx(el, k);
   push();
-  if (diamPx < NUCLEUS_DETAIL_MIN_PX) {
-    // Demasiado pequeño para distinguir nucleones: un punto de color mixto.
+  if (trueDiamPx < 1) {
+    // Ni siquiera ocupa un píxel completo: se fuerza a 1px y se declara
+    // explícitamente la diferencia, en vez de fingir un tamaño que no es real.
     noStroke();
     fill(rgbStr(categoryColor(NUCLEUS_COLOR)));
-    circle(diagramCx, diagramCy, Math.max(diamPx, 2));
+    circle(diagramCx, diagramCy, 1);
+    const ratio = 1 / trueDiamPx;
+    drawCaption(theme, diagramCx + 10, diagramCy - 4, "El núcleo real sería " + formatTimes(ratio) + " más pequeño que este píxel.", categoryColor(NUCLEUS_COLOR), LEFT, 150);
+  } else if (trueDiamPx < NUCLEUS_DETAIL_MIN_PX) {
+    // Visible pero demasiado pequeño para distinguir nucleones: un punto simple.
+    noStroke();
+    fill(rgbStr(categoryColor(NUCLEUS_COLOR)));
+    circle(diagramCx, diagramCy, trueDiamPx);
   } else {
     const points = getNucleonLayout(el);
-    const radiusPx = diamPx / 2;
+    const radiusPx = trueDiamPx / 2;
     // 0.85·R/√A: aproximación estándar de empaquetado en espiral (área disponible ≈ R²/A
     // por nucleón); con factor 1 se solaparían entre sí, con >1 (como un 1.5 anterior)
     // un solo nucleón llegaba a salirse del propio círculo del núcleo.
@@ -274,6 +355,26 @@ function drawNucleus(theme, el, k) {
       circle(diagramCx + p.x * radiusPx, diagramCy + p.y * radiusPx, dotR * 2);
     }
   }
+  pop();
+}
+
+// Pequeño texto de apoyo (con ajuste de línea), reutilizado por el aviso del
+// núcleo sub-píxel y por el puente de escalas.
+// `x` es el punto de anclaje: el borde izquierdo de la caja si align=LEFT,
+// o su CENTRO si align=CENTER (p5 sitúa la caja de texto por su esquina
+// superior izquierda en cuanto se le da un ancho, así que hay que
+// desplazarla nosotros mismos para que "x" siga significando lo mismo
+// en ambos casos).
+function drawCaption(theme, x, y, str, col, align, maxWidth) {
+  const w = maxWidth || 160;
+  let boxX = align === LEFT ? x : x - w / 2;
+  boxX = constrain(boxX, 2, width - w - 2); // nunca se sale del lienzo, en ningún sentido
+  push();
+  textAlign(align === LEFT ? LEFT : CENTER, TOP);
+  textSize(10);
+  textWrap(WORD);
+  fill(col[0], col[1], col[2]);
+  text(str, boxX, y, w);
   pop();
 }
 
@@ -367,12 +468,14 @@ function renderJourneyProgress() {
   if (fill) fill.style.width = pct + "%";
   if (text) text.innerText = "Salto " + clickIndex + " de " + total + (clickIndex >= total ? " · recorrido completo" : "");
 
-  const btn = document.getElementById("ui-btn-zoom-out");
-  if (btn) {
+  const btnOut = document.getElementById("ui-btn-zoom-out");
+  if (btnOut) {
     const complete = clickIndex >= total;
-    btn.disabled = complete;
-    btn.innerHTML = complete ? "✓ Recorrido completo" : "➖ Quitar zoom (×10)";
+    btnOut.disabled = complete;
+    btnOut.innerHTML = complete ? "✓ Completo" : "➖ Alejar (×10)";
   }
+  const btnIn = document.getElementById("ui-btn-zoom-in");
+  if (btnIn) btnIn.disabled = clickIndex <= 0;
 }
 
 function renderLadder() {
@@ -426,7 +529,24 @@ function renderLadder() {
       "</div>";
   }
   section.innerHTML = html;
-  section.scrollLeft = section.scrollWidth; // salta directamente a ver la línea más nueva
+  // Scroll ANIMADO (no un salto instantáneo) hasta la línea más nueva: recorrer
+  // visualmente la distancia, aunque sea larga, es justo lo que ayuda a sentirla.
+  smoothScrollTo(section, section.scrollWidth - section.clientWidth, 750);
+}
+
+// Easing suave (ease-out cúbico) para no dar un salto seco al final del recorrido.
+function smoothScrollTo(elx, targetLeft, durationMs) {
+  const startLeft = elx.scrollLeft;
+  const delta = targetLeft - startLeft;
+  if (Math.abs(delta) < 1) return;
+  const startTime = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / durationMs);
+    const eased = 1 - Math.pow(1 - t, 3);
+    elx.scrollLeft = startLeft + delta * eased;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 function refreshAll() {
@@ -457,6 +577,13 @@ function setupUIEventListeners() {
     const total = maxClickIndex(el);
     if (clickIndex < total) {
       clickIndex++;
+      refreshAll();
+    }
+  });
+
+  document.getElementById("ui-btn-zoom-in").addEventListener("click", () => {
+    if (clickIndex > 0) {
+      clickIndex--;
       refreshAll();
     }
   });

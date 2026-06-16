@@ -293,20 +293,27 @@
     .btn-card-reset:active { transform: scale(0.985); }
     .btn-container { margin-top: auto; flex-shrink: 0; }
 
+    .zoom-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .btn-zoom-out, .btn-zoom-in {
+      width: 100%; padding: calc(var(--ctrl-pad-y) + 4px) 8px; font-size: var(--fs-btn); font-weight: 800;
+      border-radius: 10px; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: filter 0.15s ease, background-color 0.15s ease, transform 0.08s ease;
+    }
     .btn-zoom-out {
-      width: 100%; padding: calc(var(--ctrl-pad-y) + 4px) 12px; font-size: calc(var(--fs-btn) + 1px); font-weight: 800;
-      border-radius: 10px; border: none; cursor: pointer; color: #fff;
+      color: #fff;
       background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
       box-shadow: 0 4px 12px -2px var(--accent-soft);
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      transition: filter 0.15s ease, transform 0.08s ease;
-      margin-bottom: 8px;
     }
     .btn-zoom-out:hover { filter: brightness(1.08); }
-    .btn-zoom-out:active { transform: scale(0.985); }
-    .btn-zoom-out:disabled {
+    .btn-zoom-in {
+      color: var(--text-main); background-color: var(--btn-secondary);
+    }
+    .btn-zoom-in:hover { background-color: var(--btn-secondary-hover); }
+    .btn-zoom-out:active, .btn-zoom-in:active { transform: scale(0.985); }
+    .btn-zoom-out:disabled, .btn-zoom-in:disabled {
       background: var(--btn-secondary); color: var(--text-muted); cursor: default;
-      box-shadow: none; filter: none;
+      box-shadow: none; filter: none; opacity: 0.55;
     }
 
     .progress-track {
@@ -457,15 +464,19 @@
           </div>
           <div class="info-block">
             <div class="info-label">Cada clic = ×10</div>
-            <p class="info-text">"Quitar zoom" multiplica por 10 la distancia que representa la línea. Aparece una nueva línea, diez veces más larga que la anterior — así ves crecer la escala de un vistazo.</p>
+            <p class="info-text">"Alejar" multiplica por 10 la distancia que representa la línea; "Acercar" la deshace un paso. Cada salto añade una nueva línea, diez veces más larga que la anterior — así ves crecer la escala de un vistazo.</p>
           </div>
           <div class="info-block">
             <div class="info-label">Las capas de electrones</div>
             <p class="info-text">Cuando un salto ×10 alcanza el tamaño real de una capa electrónica (K, L, M…), esa línea queda señalada con su nombre y aparece su órbita en el diagrama, con el electrón girando (modelo de Rutherford).</p>
           </div>
           <div class="info-block">
-            <div class="info-label">¿Por qué se encogen las líneas viejas?</div>
-            <p class="info-text">Para que la escalera entera quepa en pantalla, todas las líneas se reescalan juntas cuando hace falta. Por eso las primeras acaban siendo casi invisibles: es la forma más honesta de mostrar cuánto más pequeño es el núcleo que el átomo completo.</p>
+            <div class="info-label">¿Por qué se vuelve tan larga la barra?</div>
+            <p class="info-text">La primera vez que una línea no cabe en pantalla, se reduce el núcleo a 1 píxel de una vez para siempre: desde ahí todo se dibuja a escala real, sin más trucos. El scroll horizontal que aparece después puede llegar a ser enorme — es así a propósito: recorrerlo es la forma más honesta de sentir la distancia real entre el núcleo y el átomo completo.</p>
+          </div>
+          <div class="info-block">
+            <div class="info-label">El puente entre el dibujo y la barra</div>
+            <p class="info-text">Bajo el círculo del diagrama verás una pequeña cota: indica qué barra de la franja inferior representa exactamente esa misma distancia, aunque esté dibujada a una escala "cómoda" distinta. Es el enlace entre lo que ves arriba y lo que has recorrido abajo.</p>
           </div>
         </div>
       </div>
@@ -482,7 +493,10 @@
 
       <div class="control-card">
         <h2>Viaje de zoom</h2>
-        <button id="ui-btn-zoom-out" class="btn-zoom-out">➖ Quitar zoom (×10)</button>
+        <div class="zoom-btn-row">
+          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Vuelve un salto atrás, hacia el núcleo">➕ Acercar (÷10)</button>
+          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto más, ×10">➖ Alejar (×10)</button>
+        </div>
         <div class="progress-track"><div class="progress-fill" id="ui-progress-fill" style="width:0%"></div></div>
         <p class="field-hint" id="ui-progress-text">Salto 0 de 0</p>
       </div>
