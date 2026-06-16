@@ -194,6 +194,7 @@ function windowResized() {
   if (!holder) return;
   resizeCanvas(holder.offsetWidth, holder.offsetHeight);
   recomputeLayout();
+  renderLadder(); // mantiene la barra de la franja con el mismo nº de píxeles que la flecha del lienzo
 }
 
 function recomputeLayout() {
