@@ -1,19 +1,16 @@
 // =====================================================================
 // Núcleo a escala — el viaje del átomo, salto a salto ×10.
 //
-// Idea central: empezamos viendo el núcleo (protones/neutrones reales,
-// empaquetados) a un tamaño cómodo en pantalla. Cada clic en "quitar
-// zoom" multiplica ×10 la distancia real representada por la línea de
-// comparación inferior, y aparece una nueva línea (×10 más larga que
-// la anterior) en el diagrama de barras. Cuando un salto alcanza el
-// tamaño real de una capa electrónica (K, L, M…), esa capa se revela
-// tanto en la línea como en el diagrama de Rutherford (núcleo + órbitas).
-//
-// Para que la escalera de barras no se salga de la pantalla (con ×10
-// reales, al 3er salto ya mediría ~10.000 px), TODAS las barras
-// comparten un único factor de compresión (potencia de 10) que solo
-// crece cuando la barra más nueva no cabría. Esto preserva exactas las
-// proporciones relativas entre todas las líneas, vieja y nueva.
+// RECONSTRUCCIÓN POR PASOS.
+// Paso 1 (actual): estado inicial estático.
+//   · Zona de simulación (lienzo): el ÁTOMO completo con todas sus capas
+//     electrónicas. NO se dibuja el núcleo (es demasiado pequeño para verlo a
+//     esta escala). Bajo el átomo, una COTA marca su diámetro real, con la
+//     leyenda "Átomo de XXXXX". Arriba a la derecha, un recuadro avisa de que el
+//     núcleo está en el centro pero es invisible a esta escala.
+//   · Zona de líneas (franja inferior): una ÚNICA línea, del tamaño del
+//     diámetro del núcleo.
+//   · Botones de zoom: presentes, todavía SIN funcionalidad.
 // =====================================================================
 
 // ---------------------------------------------------------------------
@@ -35,21 +32,24 @@ const ELEMENTS = [
 ];
 
 const SHELL_NAMES = ["K", "L", "M", "N", "O", "P", "Q"];
-const SHELL_COLORS = [
-  { dark: [59, 130, 246], light: [26, 82, 190] }, // K azul
-  { dark: [16, 185, 129], light: [6, 120, 80] }, // L verde
-  { dark: [139, 92, 246], light: [100, 50, 200] }, // M morado
-  { dark: [245, 158, 11], light: [180, 110, 5] }, // N ámbar
-  { dark: [236, 72, 153], light: [180, 30, 110] }, // O rosa
-  { dark: [20, 184, 166], light: [10, 120, 110] }, // P turquesa
-  { dark: [234, 179, 8], light: [150, 110, 0] }, // Q amarillo
+
+// Paleta indexada por SALTO (se usará en pasos posteriores para enlazar la zona
+// de simulación con la de líneas). El salto 0 (núcleo) es rojo.
+const STEP_COLORS = [
+  { dark: [239, 68, 68], light: [200, 40, 40] }, //  0  Núcleo   · rojo
+  { dark: [245, 158, 11], light: [180, 110, 5] }, //  1  ×10¹     · ámbar
+  { dark: [16, 185, 129], light: [6, 120, 80] }, //  2  ×10²     · verde
+  { dark: [6, 182, 212], light: [12, 120, 150] }, //  3  ×10³     · cian
+  { dark: [59, 130, 246], light: [26, 82, 190] }, //  4  ×10⁴     · azul
+  { dark: [139, 92, 246], light: [100, 50, 200] }, //  5  ×10⁵     · violeta
+  { dark: [236, 72, 153], light: [180, 30, 110] }, //  6  ×10⁶     · rosa
+  { dark: [20, 184, 166], light: [10, 120, 110] }, //  7  ×10⁷     · turquesa
 ];
-const NUCLEUS_COLOR = { dark: [239, 68, 68], light: [185, 30, 30] }; // color de la línea/etiqueta del núcleo
+
 const PROTON_COLOR = [220, 50, 50];
 const NEUTRON_COLOR = [148, 163, 184];
-const NEUTRAL_STEP_COLOR = { dark: [100, 112, 138], light: [120, 130, 150] }; // saltos ×10 sin capa nueva
 
-const BASE_PX = 100; // tamaño en píxeles del núcleo (línea 0) antes de cualquier reescalado
+const BASE_PX = 100; // tamaño en píxeles del núcleo (salto 0) a escala "cómoda"
 
 // ---------------------------------------------------------------------
 // Cálculo derivado de cada elemento (radios reales en metros)
@@ -61,7 +61,8 @@ function computeElement(el) {
   const outerRadiusM = el.atomicRadiusPm * 1e-12;
   const scale = outerRadiusM / (numShells * numShells); // ancla la capa externa al radio atómico real
   const shellDiametersM = el.shells.map((_, i) => 2 * scale * (i + 1) * (i + 1));
-  return Object.assign({}, el, { N, nucleusDiameterM, shellDiametersM });
+  const atomDiameterM = 2 * outerRadiusM;
+  return Object.assign({}, el, { N, nucleusDiameterM, shellDiametersM, atomDiameterM });
 }
 const ELEMENT_DATA = {};
 ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
@@ -70,24 +71,19 @@ ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
 // Estado global
 // ---------------------------------------------------------------------
 let currentElementId = "H";
-let clickIndex = 0; // 0 = solo el núcleo, sin saltos todavía
-let nucleonLayoutCache = null; // posiciones (relativas, radio unidad) cacheadas por elemento
-let shellAngles = []; // ángulo actual del electrón en cada capa (animación)
+let clickIndex = 0; // 0 = solo el núcleo, sin saltos todavía (zoom: paso posterior)
+let nucleonLayoutCache = null; // posiciones cacheadas de nucleones (para pasos posteriores)
+let electronAngles = []; // fase de giro de los electrones por capa (animación)
 
-// Escala de la ESCALERA de comparación (DOM, no el diagrama). Empieza en
-// BASE_PX (núcleo cómodo de ver) y, la PRIMERA vez que una línea nueva no
-// cabe en el ancho visible, se reduce de una vez para siempre a 1px: a
-// partir de ahí todas las líneas se dibujan a escala real (×10 exacto,
-// sin más compresión) y el contenedor scrollea horizontalmente lo que
-// haga falta. Ese scroll larguísimo es deliberado: es lo que transmite
-// la distancia real entre el núcleo y el átomo completo.
+// Escala de la franja de líneas (DOM). En el paso 1 solo hay una línea (núcleo)
+// a tamaño cómodo (BASE_PX).
 let ladderScalePx = BASE_PX;
 
 const uiCache = { theme: "dark" };
-let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría del diagrama, recalculada en resize
+let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría, recalculada en resize
 
 // =====================================================================
-// Utilidades numéricas y de formato (mismas convenciones que el resto de la colección)
+// Utilidades numéricas y de formato
 // =====================================================================
 
 const SUPERSCRIPT_MAP = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
@@ -105,11 +101,6 @@ function formatTimes(ratio) {
   const exp = Math.floor(Math.log10(ratio));
   const mantissa = ratio / Math.pow(10, exp);
   return mantissa.toFixed(2).replace(".", ",") + " × 10" + toSuperscript(exp) + " veces";
-}
-
-// Formatea un número de píxeles con separador de miles en es-ES.
-function formatPx(px) {
-  return Math.round(px).toLocaleString("es-ES") + " px";
 }
 
 function formatSig(value, sig) {
@@ -133,15 +124,40 @@ function formatLength(m) {
   return formatSig(value, 3) + " " + unit;
 }
 
+// Longitud en metros con notación científica (p.ej. "1,06 × 10⁻¹⁰ m").
+function formatScientificM(m) {
+  if (m === 0) return "0 m";
+  const exp = Math.floor(Math.log10(Math.abs(m)));
+  const mant = m / Math.pow(10, exp);
+  return mant.toFixed(2).replace(".", ",") + " × 10" + toSuperscript(exp) + " m";
+}
+
 function categoryColor(entry) {
   return uiCache.theme === "light" ? entry.light : entry.dark;
 }
 function rgbStr(arr, alpha) {
   return alpha === undefined ? "rgb(" + arr.join(",") + ")" : "rgba(" + arr.join(",") + "," + alpha + ")";
 }
+function stepColor(i) { return categoryColor(STEP_COLORS[i % STEP_COLORS.length]); }
+
+// Colores derivados del tema actual (equivalentes a las variables CSS).
+function mutedText(theme) {
+  return theme === "light" ? [100, 116, 139] : theme === "high-contrast" ? [204, 204, 204] : [154, 166, 189];
+}
+function inkText(theme) {
+  return theme === "light" ? [12, 26, 40] : theme === "high-contrast" ? [255, 255, 255] : [226, 232, 240];
+}
+function accentColor(theme) {
+  return theme === "light" ? [26, 82, 190] : theme === "high-contrast" ? [255, 255, 0] : [96, 165, 250];
+}
+function cardColors(theme) {
+  if (theme === "light") return { bg: [205, 212, 222], border: [143, 160, 178], ink: [12, 26, 40] };
+  if (theme === "high-contrast") return { bg: [24, 24, 24], border: [255, 255, 255], ink: [255, 255, 255] };
+  return { bg: [30, 35, 52], border: [43, 49, 71], ink: [238, 242, 248] };
+}
 
 // =====================================================================
-// Lógica del viaje de zoom: líneas, capas reveladas y reescalado
+// Lógica del viaje de zoom (andamiaje para pasos posteriores)
 // =====================================================================
 
 function getElement() { return ELEMENT_DATA[currentElementId]; }
@@ -150,39 +166,11 @@ function getElement() { return ELEMENT_DATA[currentElementId]; }
 function lineDiameterM(el, i) { return el.nucleusDiameterM * Math.pow(10, i); }
 
 function maxClickIndex(el) {
-  // El recorrido termina en el salto que alcanza (o supera) la capa más externa.
   const outerDiam = el.shellDiametersM[el.shellDiametersM.length - 1];
   let i = 0;
   while (lineDiameterM(el, i) < outerDiam && i < 30) i++;
   return i;
 }
-
-// Para cada salto 0..clickIndex, qué capas (índices) se revelan EN ESE salto exactamente.
-function buildRevealMap(el, upToIndex) {
-  const revealed = new Set();
-  const revealAt = []; // revealAt[i] = [índices de capa revelados en el salto i]
-  for (let i = 0; i <= upToIndex; i++) {
-    const diam = lineDiameterM(el, i);
-    const newly = [];
-    el.shellDiametersM.forEach((d, s) => {
-      if (d <= diam && !revealed.has(s)) { revealed.add(s); newly.push(s); }
-    });
-    revealAt.push(newly);
-  }
-  return { revealed, revealAt };
-}
-
-// Factor de compresión k: la mínima potencia de 10 tal que la línea más nueva
-// (clickIndex) quepa dentro de maxPx. Todas las líneas usan el mismo k.
-function computeK(el, upToIndex, maxPx) {
-  const rawPx = BASE_PX * Math.pow(10, upToIndex);
-  let k = 0;
-  while (rawPx / Math.pow(10, k) > maxPx && k < 30) k++;
-  return k;
-}
-
-function realToRawPx(el, lengthM) { return (lengthM / el.nucleusDiameterM) * BASE_PX; }
-function realToDisplayPx(el, lengthM, k) { return realToRawPx(el, lengthM) / Math.pow(10, k); }
 
 // =====================================================================
 // p5 — ciclo de vida
@@ -198,7 +186,7 @@ function setup() {
   populateElementSelect();
   setupAppearanceEventListeners();
   setupUIEventListeners();
-  resetJourney(); // construye el estado inicial y pinta el panel lateral + escalera
+  resetJourney(); // estado inicial + pinta panel lateral y franja inferior
 }
 
 function windowResized() {
@@ -214,103 +202,177 @@ function recomputeLayout() {
   diagramMaxRadiusPx = Math.max(20, Math.min(width, height) / 2 - 28);
 }
 
+// Rectángulo (px) del recuadro informativo del núcleo, en la esquina superior
+// derecha. Centralizado para que la geometría del átomo pueda esquivarlo.
+function nucleusInfoBoxRect() {
+  const w = Math.min(252, Math.max(176, width * 0.36));
+  return { x: width - w - 14, y: 72, w: w, h: 70 };
+}
+
+// Distancia de un punto al rectángulo r (0 si el punto está dentro).
+function pointRectDist(px, py, r) {
+  const dx = Math.max(r.x - px, 0, px - (r.x + r.w));
+  const dy = Math.max(r.y - py, 0, py - (r.y + r.h));
+  return Math.hypot(dx, dy);
+}
+
+// Geometría del átomo dibujado (centro y radio en px). El radio se limita para
+// que el círculo más externo (y sus electrones) NUNCA toque el recuadro del
+// núcleo. La usan tanto el lienzo como la franja inferior, de modo que la barra
+// de abajo pueda medir exactamente lo mismo que la flecha del diámetro.
+function atomLayout() {
+  const cx = width / 2;
+  const areaTop = 26;
+  const areaBottom = height - 84; // espacio inferior para la cota y la leyenda
+  const cy = (areaTop + areaBottom) / 2;
+  let atomR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2)) * 0.94;
+  const clearance = pointRectDist(cx, cy, nucleusInfoBoxRect()) - 10;
+  atomR = Math.max(24, Math.min(atomR, clearance));
+  return { cx, cy, atomR };
+}
+
 function draw() {
   const theme = uiCache.theme;
   background(theme === "light" ? [248, 250, 252] : theme === "high-contrast" ? [0, 0, 0] : [11, 12, 16]);
-
   const el = getElement();
-  // k se calibra al valor REAL del salto actual (línea ×10^clickIndex), no al
-  // tamaño de lo que ya se ha revelado: así el núcleo encoge visiblemente en
-  // CADA clic (coherente con la etiqueta "Salto ×10ⁱ"), aunque eso signifique
-  // que una capa pequeña recién revelada se vea con margen alrededor — eso es
-  // correcto: si el salto actual ya "se pasó" de su tamaño, debe verse pequeña.
-  const k = computeK(el, clickIndex, diagramMaxRadiusPx * 2);
-  const { revealed } = buildRevealMap(el, clickIndex);
-
-  drawShellOrbits(theme, el, revealed, k);
-  drawNucleus(theme, el, k);
-  drawJourneyLabel(theme, el, k);
-  if (clickIndex >= 1) drawScaleBridge(theme, el, revealed, k);
+  drawAtomView(theme, el);
+  drawNucleusInfoBox(theme);
 }
 
 // =====================================================================
-// Puente de escalas: conecta lo dibujado en el diagrama (escala "cómoda",
-// calibrada por k) con la barra real correspondiente en la franja de
-// scroll de abajo (escala real, anclada al núcleo=1px tras el disparo).
-// Es la pieza que responde a "¿qué es, en la barra de abajo, esto que
-// estoy viendo aquí arriba?".
+// Zona de simulación (paso 1): el átomo completo + cota del diámetro
 // =====================================================================
 
-// Salto (índice) en el que una capa concreta queda revelada por primera vez.
-function revealRowIndexForShell(el, s) {
-  let i = 0;
-  while (lineDiameterM(el, i) < el.shellDiametersM[s] && i < 30) i++;
-  return i;
-}
+function drawAtomView(theme, el) {
+  const cx = width / 2;
+  const topMargin = 26;
+  const cotaZone = 84; // espacio inferior reservado para la cota y la leyenda
+  const areaTop = topMargin;
+  const areaBottom = height - cotaZone;
+  const cy = (areaTop + areaBottom) / 2;
+  const maxR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2));
+  const atomR = maxR * 0.94;
+  const numShells = el.shells.length;
 
-// El elemento más grande actualmente dibujado: la capa revelada más externa,
-// o el núcleo si todavía no se ha revelado ninguna capa.
-function getFocusBoundary(el, revealed) {
-  let best = { kind: "nucleus", diamM: el.nucleusDiameterM, rowIndex: 0, colorEntry: NUCLEUS_COLOR, label: "Núcleo" };
-  el.shellDiametersM.forEach((d, s) => {
-    if (revealed.has(s) && d > best.diamM) {
-      best = { kind: "shell", diamM: d, rowIndex: revealRowIndexForShell(el, s), colorEntry: SHELL_COLORS[s % SHELL_COLORS.length], label: "Capa " + SHELL_NAMES[s] };
-    }
-  });
-  return best;
-}
+  const acc = accentColor(theme);
+  const mt = mutedText(theme);
 
-function drawScaleBridge(theme, el, revealed, k) {
-  const focus = getFocusBoundary(el, revealed);
-  const diagramPx = realToDisplayPx(el, focus.diamM, k);
-  // Ancho real (px) que esa misma frontera ocupa AHORA MISMO en la franja de
-  // scroll, con la escala vigente de la escalera (ladderScalePx).
-  const scrollBarPx = ladderScalePx * Math.pow(10, focus.rowIndex);
-  const col = categoryColor(focus.colorEntry);
-
-  const halfW = Math.max(diagramPx / 2, 6); // mínimo visible aunque el círculo sea sub-píxel
-  const y = diagramCy + Math.max(diagramPx / 2, 10) + 16;
-  if (y + 34 > height - 6) return; // sin espacio: se omite antes que solaparse con el borde
+  // Avanza la fase de giro de cada capa (capas externas, más lentas).
+  while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
   push();
-  stroke(col[0], col[1], col[2]);
-  strokeWeight(1.4);
-  line(diagramCx - halfW, y, diagramCx + halfW, y);
-  line(diagramCx - halfW, y - 5, diagramCx - halfW, y + 5);
-  line(diagramCx + halfW, y - 5, diagramCx + halfW, y + 5);
+  for (let s = 0; s < numShells; s++) {
+    const rs = atomR * (s + 1) / numShells;
+
+    // Órbita (círculo de la capa)
+    noFill();
+    stroke(acc[0], acc[1], acc[2], 150);
+    strokeWeight(1.3);
+    circle(cx, cy, rs * 2);
+
+    // Electrones repartidos por la capa, girando suavemente
+    const ne = el.shells[s];
+    electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+    noStroke();
+    fill(acc[0], acc[1], acc[2]);
+    for (let k = 0; k < ne; k++) {
+      const ang = electronAngles[s] + (k / ne) * TWO_PI;
+      circle(cx + rs * Math.cos(ang), cy + rs * Math.sin(ang), 6);
+    }
+  }
   pop();
 
-  const caption = "↕ " + focus.label + " = barra ×10" + toSuperscript(focus.rowIndex) + " de abajo (" + formatPx(scrollBarPx) + ")";
-  drawCaption(theme, diagramCx, y + 8, caption, col, CENTER, Math.max(220, diagramPx + 40));
+  drawDiameterCota(theme, cx, cy, atomR, el);
+}
+
+// Cota (línea de medida) del diámetro del átomo, justo debajo del dibujo, con su
+// valor real y la leyenda "Átomo de XXXXX".
+function drawDiameterCota(theme, cx, cy, atomR, el) {
+  const ink = inkText(theme);
+  const acc = accentColor(theme);
+  const y = cy + atomR + 24;
+  const x1 = cx - atomR, x2 = cx + atomR;
+
+  push();
+  stroke(acc[0], acc[1], acc[2]);
+  strokeWeight(6);
+  line(x1, y, x2, y);             // línea horizontal
+  line(x1, y - 8, x1, y + 8);     // tope izquierdo
+  line(x2, y - 8, x2, y + 8);     // tope derecho
+  noStroke();
+  fill(acc[0], acc[1], acc[2]);
+  triangle(x1, y, x1 + 14, y - 7, x1 + 14, y + 7); // punta hacia dentro (izq.)
+  triangle(x2, y, x2 - 14, y - 7, x2 - 14, y + 7); // punta hacia dentro (der.)
+  pop();
+
+  push();
+  textAlign(CENTER, BOTTOM);
+  textStyle(BOLD);
+  textSize(12);
+  fill(ink[0], ink[1], ink[2]);
+  text("Ø " + formatLength(el.atomDiameterM), cx, y - 5); // valor sobre la línea
+  textAlign(CENTER, TOP);
+  textSize(13.5);
+  text("Átomo de " + el.name, cx, y + 12);                // leyenda bajo la línea
+  textStyle(NORMAL);
+  pop();
+}
+
+// Recuadro superior derecho que advierte de que el núcleo no es visible aquí.
+function drawNucleusInfoBox(theme) {
+  const card = cardColors(theme);
+  const msg = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
+  const boxW = Math.min(252, Math.max(176, width * 0.36));
+  const pad = 12;
+  const x = width - boxW - 14;
+  const y = 20; // alejado del engranaje para no tapar órbita
+  const boxH = 70;
+
+  push();
+  rectMode(CORNER);
+  stroke(card.border[0], card.border[1], card.border[2]);
+  strokeWeight(1);
+  fill(card.bg[0], card.bg[1], card.bg[2]);
+  rect(x, y, boxW, boxH, 9);
+
+  // Marca roja (color del núcleo) en el borde izquierdo del recuadro.
+  noStroke();
+  const red = stepColor(0);
+  fill(red[0], red[1], red[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(15);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
+  pop();
 }
 
 // =====================================================================
-// Diagrama de Rutherford
+// Nucleones y etiqueta de salto: andamiaje para pasos posteriores (no se usan
+// todavía en el paso 1, pero se conservan para no rehacerlos después).
 // =====================================================================
 
-// Empaquetado tipo "espiral de girasol" (Vogel): reparte N puntos en un
-// círculo de forma uniforme y estable (no aleatoria), ideal para un
-// racimo de nucleones que no se reordene entre fotogramas.
 function buildNucleonLayout(el) {
   const total = el.A;
-  const golden = Math.PI * (3 - Math.sqrt(5)); // ángulo dorado
+  const golden = Math.PI * (3 - Math.sqrt(5));
   const types = [];
   for (let i = 0; i < el.Z; i++) types.push("p");
   for (let i = 0; i < el.N; i++) types.push("n");
-  // Orden estable pero entremezclado (no agrupa todos los protones juntos),
-  // usando un generador determinista (sin Math.random) para que sea reproducible.
   let seed = el.Z * 1000 + el.A;
   function nextRand() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
   for (let i = types.length - 1; i > 0; i--) {
     const j = Math.floor(nextRand() * (i + 1));
     const tmp = types[i]; types[i] = types[j]; types[j] = tmp;
   }
-  const points = types.map((type, i) => {
-    const r = Math.sqrt((i + 0.5) / total); // radio normalizado (0..1)
+  return types.map((type, i) => {
+    const r = Math.sqrt((i + 0.5) / total);
     const theta = i * golden;
     return { type, x: r * Math.cos(theta), y: r * Math.sin(theta) };
   });
-  return points;
 }
 
 function getNucleonLayout(el) {
@@ -320,124 +382,22 @@ function getNucleonLayout(el) {
   return nucleonLayoutCache.points;
 }
 
-const NUCLEUS_DETAIL_MIN_PX = 10; // por debajo de este diámetro, se dibuja como punto único
-
-// Devuelve el diámetro REAL (sin forzar mínimos) del núcleo en el diagrama,
-// para que otras funciones (p.ej. el puente de escalas) sepan su tamaño exacto.
-function nucleusDiamPx(el, k) { return realToDisplayPx(el, el.nucleusDiameterM, k); }
-
-function drawNucleus(theme, el, k) {
-  const trueDiamPx = nucleusDiamPx(el, k);
-  push();
-  if (trueDiamPx < 1) {
-    // Ni siquiera ocupa un píxel completo: se fuerza a 1px y se declara
-    // explícitamente la diferencia, en vez de fingir un tamaño que no es real.
-    noStroke();
-    fill(rgbStr(categoryColor(NUCLEUS_COLOR)));
-    circle(diagramCx, diagramCy, 1);
-    const ratio = 1 / trueDiamPx;
-    drawCaption(theme, diagramCx + 10, diagramCy - 4, "El núcleo real sería " + formatTimes(ratio) + " más pequeño que este píxel.", categoryColor(NUCLEUS_COLOR), LEFT, 150);
-  } else if (trueDiamPx < NUCLEUS_DETAIL_MIN_PX) {
-    // Visible pero demasiado pequeño para distinguir nucleones: un punto simple.
-    noStroke();
-    fill(rgbStr(categoryColor(NUCLEUS_COLOR)));
-    circle(diagramCx, diagramCy, trueDiamPx);
-  } else {
-    const points = getNucleonLayout(el);
-    const radiusPx = trueDiamPx / 2;
-    // 0.85·R/√A: aproximación estándar de empaquetado en espiral (área disponible ≈ R²/A
-    // por nucleón); con factor 1 se solaparían entre sí, con >1 (como un 1.5 anterior)
-    // un solo nucleón llegaba a salirse del propio círculo del núcleo.
-    const dotR = Math.min(radiusPx, Math.max(1.1, (radiusPx / Math.sqrt(el.A)) * 0.85));
-    noStroke();
-    for (const p of points) {
-      fill(p.type === "p" ? color(PROTON_COLOR[0], PROTON_COLOR[1], PROTON_COLOR[2]) : color(NEUTRON_COLOR[0], NEUTRON_COLOR[1], NEUTRON_COLOR[2]));
-      circle(diagramCx + p.x * radiusPx, diagramCy + p.y * radiusPx, dotR * 2);
-    }
-  }
-  pop();
-}
-
-// Pequeño texto de apoyo (con ajuste de línea), reutilizado por el aviso del
-// núcleo sub-píxel y por el puente de escalas.
-// `x` es el punto de anclaje: el borde izquierdo de la caja si align=LEFT,
-// o su CENTRO si align=CENTER (p5 sitúa la caja de texto por su esquina
-// superior izquierda en cuanto se le da un ancho, así que hay que
-// desplazarla nosotros mismos para que "x" siga significando lo mismo
-// en ambos casos).
+// Texto de apoyo con ajuste de línea (reutilizable en pasos posteriores).
 function drawCaption(theme, x, y, str, col, align, maxWidth) {
   const w = maxWidth || 160;
   let boxX = align === LEFT ? x : x - w / 2;
-  boxX = constrain(boxX, 2, width - w - 2); // nunca se sale del lienzo, en ningún sentido
+  boxX = constrain(boxX, 2, Math.max(2, width - w - 2));
   push();
   textAlign(align === LEFT ? LEFT : CENTER, TOP);
-  textSize(10);
+  textSize(10.5);
   textWrap(WORD);
   fill(col[0], col[1], col[2]);
   text(str, boxX, y, w);
   pop();
 }
 
-function drawShellOrbits(theme, el, revealed, k) {
-  push();
-  noFill();
-  // Avanza la animación de los electrones revelados.
-  while (shellAngles.length < el.shellDiametersM.length) shellAngles.push(random(TWO_PI));
-  el.shellDiametersM.forEach((diamM, s) => {
-    if (!revealed.has(s)) return;
-    const diamPx = realToDisplayPx(el, diamM, k);
-    const radiusPx = diamPx / 2;
-    const col = categoryColor(SHELL_COLORS[s % SHELL_COLORS.length]);
-    stroke(col[0], col[1], col[2], 150);
-    strokeWeight(1.4);
-    circle(diagramCx, diagramCy, diamPx);
-
-    // Velocidad angular decreciente para capas más externas (más realista: más lentas).
-    shellAngles[s] += (0.9 / Math.sqrt(s + 1)) * (deltaTime / 1000);
-    const ex = diagramCx + radiusPx * Math.cos(shellAngles[s]);
-    const ey = diagramCy + radiusPx * Math.sin(shellAngles[s]);
-    noStroke();
-    fill(col[0], col[1], col[2]);
-    circle(ex, ey, 7);
-
-    // Etiqueta de la capa, junto a su órbita (a la derecha, si cabe en el lienzo).
-    if (radiusPx > 14) {
-      textAlign(LEFT, CENTER);
-      textSize(10.5);
-      fill(col[0], col[1], col[2]);
-      const lx = Math.min(diagramCx + radiusPx + 6, width - 30);
-      text("Capa " + SHELL_NAMES[s], lx, diagramCy - radiusPx + 8);
-    }
-  });
-  pop();
-}
-
-function drawJourneyLabel(theme, el, k) {
-  const diamM = lineDiameterM(el, clickIndex);
-  const label = "Salto ×10" + toSuperscript(clickIndex) + "  ·  " + formatLength(diamM);
-  push();
-  textAlign(CENTER, TOP);
-  textStyle(BOLD);
-  textSize(13);
-  const tw = textWidth(label) + 18;
-  const bx = constrain(diagramCx - tw / 2, 4, width - tw - 4);
-  const by = 14;
-  noStroke();
-  fill(theme === "light" ? color(255, 255, 255, 235) : color(22, 26, 42, 235));
-  rect(bx, by, tw, 24, 6);
-  stroke(theme === "light" ? color(203, 213, 225) : color(55, 65, 95));
-  strokeWeight(1);
-  noFill();
-  rect(bx, by, tw, 24, 6);
-  noStroke();
-  fill(theme === "light" ? color(30, 41, 59) : color(226, 232, 240));
-  textStyle(NORMAL);
-  text(label, bx + tw / 2, by + 5);
-  pop();
-}
-
 // =====================================================================
-// Panel lateral: datos del elemento, progreso, escalera de comparación (DOM)
+// Panel lateral: datos del elemento, progreso, franja de líneas (DOM)
 // =====================================================================
 
 function populateElementSelect() {
@@ -454,6 +414,7 @@ function renderElementFacts() {
     ["Neutrones (N)", el.N],
     ["Número de masa (A)", el.A],
     ["Diámetro del núcleo", formatLength(el.nucleusDiameterM)],
+    ["Diámetro del átomo", formatLength(el.atomDiameterM)],
     ["Capas electrónicas", el.shells.length + " (" + el.shells.map((c, i) => SHELL_NAMES[i] + ":" + c).join(", ") + ")"],
   ];
   box.innerHTML = rows.map((r) => '<div class="fact-row"><span>' + r[0] + '</span><span class="fact-value">' + r[1] + "</span></div>").join("");
@@ -464,89 +425,43 @@ function renderJourneyProgress() {
   const total = maxClickIndex(el);
   const fill = document.getElementById("ui-progress-fill");
   const text = document.getElementById("ui-progress-text");
-  const pct = total === 0 ? 100 : Math.round((clickIndex / total) * 100);
+  const pct = total === 0 ? 0 : Math.round((clickIndex / total) * 100);
   if (fill) fill.style.width = pct + "%";
-  if (text) text.innerText = "Salto " + clickIndex + " de " + total + (clickIndex >= total ? " · recorrido completo" : "");
+  if (text) text.innerText = "Salto " + clickIndex + " de " + total;
 
+  // Paso 1: los botones se muestran pero su funcionalidad llegará después.
   const btnOut = document.getElementById("ui-btn-zoom-out");
-  if (btnOut) {
-    const complete = clickIndex >= total;
-    btnOut.disabled = complete;
-    btnOut.innerHTML = complete ? "✓ Completo" : "➖ Alejar (×10)";
-  }
+  if (btnOut) { btnOut.disabled = false; btnOut.innerHTML = "➖ Alejar (×10)"; }
   const btnIn = document.getElementById("ui-btn-zoom-in");
-  if (btnIn) btnIn.disabled = clickIndex <= 0;
+  if (btnIn) btnIn.disabled = true; // "Acercar" deshabilitado: aún no hay zoom del que volver
 }
 
+// Franja inferior: en el paso 1, una única línea del tamaño del diámetro del átomo completo.
 function renderLadder() {
   const el = getElement();
   const section = document.getElementById("ladder-section");
-  if (clickIndex === 0) {
-    section.innerHTML = '<p class="ladder-empty">Pulsa "Quitar zoom" para empezar a comparar tamaños.</p>';
-    ladderScalePx = BASE_PX; // por si se vuelve a 0 desde "reiniciar"
-    return;
-  }
-
-  // ¿La línea que se acaba de añadir sigue cabiendo, a la escala "cómoda"
-  // actual, en el ancho visible (sin contar la etiqueta fija de la izquierda)?
-  // Si no cabe Y todavía no hemos reducido nunca, se reduce la PRIMERA línea
-  // a 1px de una vez para siempre: desde ahí todo se dibuja a escala real
-  // (×10 exacto) y el contenedor scrollea en horizontal lo que haga falta.
-  const labelColPx = 160;
-  const visibleBudgetPx = Math.max(120, (section.clientWidth || 700) - labelColPx);
-  const newestRawPx = ladderScalePx * Math.pow(10, clickIndex);
-  if (ladderScalePx === BASE_PX && newestRawPx > visibleBudgetPx) {
-    ladderScalePx = 1;
-  }
-
-  const { revealAt } = buildRevealMap(el, clickIndex);
-
-  let html = "";
-  for (let i = 0; i <= clickIndex; i++) {
-    const diamM = lineDiameterM(el, i);
-    const barPx = Math.max(ladderScalePx * Math.pow(10, i), 1);
-    const shellsHere = revealAt[i] || [];
-    // Nota: variable nombrada "barColor" a propósito (no "color") para no
-    // ensombrear la función global color() de p5 dentro de este archivo.
-    let barColor, shellLabel;
-    if (i === 0) {
-      barColor = categoryColor(NUCLEUS_COLOR);
-      shellLabel = "Núcleo";
-    } else if (shellsHere.length > 0) {
-      barColor = categoryColor(SHELL_COLORS[shellsHere[0] % SHELL_COLORS.length]);
-      shellLabel = shellsHere.map((s) => SHELL_NAMES[s]).join("+");
-    } else {
-      barColor = categoryColor(NEUTRAL_STEP_COLOR);
-      shellLabel = "×10" + toSuperscript(i);
-    }
-    html +=
-      '<div class="ladder-row">' +
-      '<span class="ladder-row-label"><span class="ladder-row-swatch" style="background:' + rgbStr(barColor) + '"></span>' +
-      (i === 0 ? "Núcleo" : "×10" + toSuperscript(i) + (shellsHere.length ? ' <span class="ladder-row-shells">→ ' + shellLabel + "</span>" : "")) +
-      "</span>" +
-      '<span class="ladder-row-bar" style="width:' + barPx + "px; background:" + rgbStr(barColor) + ';"></span>' +
-      '<span class="ladder-row-value">' + formatLength(diamM) + "</span>" +
-      "</div>";
-  }
-  section.innerHTML = html;
-  // Scroll ANIMADO (no un salto instantáneo) hasta la línea más nueva: recorrer
-  // visualmente la distancia, aunque sea larga, es justo lo que ayuda a sentirla.
-  smoothScrollTo(section, section.scrollWidth - section.clientWidth, 750);
-}
-
-// Easing suave (ease-out cúbico) para no dar un salto seco al final del recorrido.
-function smoothScrollTo(elx, targetLeft, durationMs) {
-  const startLeft = elx.scrollLeft;
-  const delta = targetLeft - startLeft;
-  if (Math.abs(delta) < 1) return;
-  const startTime = performance.now();
-  function step(now) {
-    const t = Math.min(1, (now - startTime) / durationMs);
-    const eased = 1 - Math.pow(1 - t, 3);
-    elx.scrollLeft = startLeft + delta * eased;
-    if (t < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
+  const barColor = accentColor(uiCache.theme);
+  
+  // Calcular atomR con la misma lógica que en drawAtomView() para que la barra tenga la misma longitud
+  const topMargin = 26;
+  const cotaZone = 84;
+  const areaTop = topMargin;
+  const areaBottom = height - cotaZone;
+  const maxR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2));
+  const atomR = maxR * 0.94;
+  const atomBarPx = atomR * 2; // diámetro = 2 * radio
+  
+  // Mostrar tanto en unidades como en notación científica
+  const valueInUnits = formatLength(el.atomDiameterM);
+  const valueInScientific = formatScientificM(el.atomDiameterM);
+  
+  section.innerHTML =
+    '<div class="ladder-row">' +
+    '<span class="ladder-row-label"><span class="ladder-row-swatch" style="background:' + rgbStr(barColor) + '"></span>Átomo de ' + el.name + '</span>' +
+    '<span class="ladder-row-bar" style="width:' + atomBarPx + "px; background:" + rgbStr(barColor) + '; margin-right: 12px;"></span>' +
+    '<span class="ladder-row-value" style="flex-shrink: 0; margin-left: auto;">' + valueInUnits + " / " + valueInScientific + "</span>" +
+    "</div>";
+  section.scrollLeft = 0;
 }
 
 function refreshAll() {
@@ -561,7 +476,6 @@ function refreshAll() {
 
 function resetJourney() {
   clickIndex = 0;
-  shellAngles = [];
   ladderScalePx = BASE_PX;
   refreshAll();
 }
@@ -569,24 +483,13 @@ function resetJourney() {
 function setupUIEventListeners() {
   document.getElementById("ui-element-select").addEventListener("change", (e) => {
     currentElementId = e.target.value;
+    electronAngles = [];
     resetJourney();
   });
 
-  document.getElementById("ui-btn-zoom-out").addEventListener("click", () => {
-    const el = getElement();
-    const total = maxClickIndex(el);
-    if (clickIndex < total) {
-      clickIndex++;
-      refreshAll();
-    }
-  });
-
-  document.getElementById("ui-btn-zoom-in").addEventListener("click", () => {
-    if (clickIndex > 0) {
-      clickIndex--;
-      refreshAll();
-    }
-  });
+  // Zoom: funcionalidad pendiente (paso posterior). De momento, sin efecto.
+  document.getElementById("ui-btn-zoom-out").addEventListener("click", () => { /* TODO: alejar ×10 */ });
+  document.getElementById("ui-btn-zoom-in").addEventListener("click", () => { /* TODO: acercar ÷10 */ });
 
   document.getElementById("ui-btn-reset").addEventListener("click", () => {
     resetJourney();
@@ -596,8 +499,6 @@ function setupUIEventListeners() {
   document.getElementById("ui-info-trigger").addEventListener("click", () => {
     infoCard.classList.toggle("is-expanded");
   });
-
-  window.addEventListener("resize", () => { renderLadder(); });
 }
 
 function setupAppearanceEventListeners() {
