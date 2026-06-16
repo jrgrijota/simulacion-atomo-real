@@ -197,33 +197,18 @@ function recomputeLayout() {
   diagramMaxRadiusPx = Math.max(20, Math.min(width, height) / 2 - 28);
 }
 
-// Diámetro real (m) del elemento más grande actualmente dibujado: la capa
-// revelada más externa, o el núcleo si todavía no se ha revelado ninguna.
-function largestVisibleDiameterM(el, revealed) {
-  let maxD = el.nucleusDiameterM;
-  el.shellDiametersM.forEach((d, s) => { if (revealed.has(s) && d > maxD) maxD = d; });
-  return maxD;
-}
-
-// k calibrado a un LARGO REAL arbitrario (no al valor abstracto del salto ×10):
-// así el diagrama siempre aprovecha el espacio disponible en vez de quedar
-// minúsculo cuando el salto "se pasa" del tamaño de la capa que en realidad
-// se está dibujando (algo muy frecuente: varias capas caben en un mismo salto).
-function computeKForLength(el, lengthM, maxPx) {
-  const rawPx = realToRawPx(el, lengthM);
-  let k = 0;
-  while (rawPx / Math.pow(10, k) > maxPx && k < 30) k++;
-  return k;
-}
-
 function draw() {
   const theme = uiCache.theme;
   background(theme === "light" ? [248, 250, 252] : theme === "high-contrast" ? [0, 0, 0] : [11, 12, 16]);
 
   const el = getElement();
+  // k se calibra al valor REAL del salto actual (línea ×10^clickIndex), no al
+  // tamaño de lo que ya se ha revelado: así el núcleo encoge visiblemente en
+  // CADA clic (coherente con la etiqueta "Salto ×10ⁱ"), aunque eso signifique
+  // que una capa pequeña recién revelada se vea con margen alrededor — eso es
+  // correcto: si el salto actual ya "se pasó" de su tamaño, debe verse pequeña.
+  const k = computeK(el, clickIndex, diagramMaxRadiusPx * 2);
   const { revealed } = buildRevealMap(el, clickIndex);
-  const maxVisibleM = largestVisibleDiameterM(el, revealed);
-  const k = computeKForLength(el, maxVisibleM, diagramMaxRadiusPx * 2);
 
   drawShellOrbits(theme, el, revealed, k);
   drawNucleus(theme, el, k);
