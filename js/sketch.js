@@ -738,6 +738,39 @@ function makeLadderRow(col, name, px, label) {
     '</div>';
 }
 
+function makeNucleusLadderRow(col, name, pxNucleus, pxAtom, label) {
+  const colStr = rgbStr(col);
+
+  // Ajustar espaciado para no superar 2000 marcas (ej: si ratio>200.000, pasar a 1000·D)
+  let tickEvery = 100;
+  while (pxAtom / (tickEvery * pxNucleus) > 2000) tickEvery *= 10;
+
+  const step = tickEvery * pxNucleus;
+  const count = Math.floor(pxAtom / step);
+  let ticks = '';
+  for (let k = 1; k <= count; k++) {
+    const left = k * step;
+    const lbl = (k * tickEvery).toLocaleString('es-ES') + '·D';
+    ticks += '<span class="ladder-nucleus-tick" style="left:' + left + 'px">' +
+      '<span class="ladder-nucleus-tick-line"></span>' +
+      '<span class="ladder-nucleus-tick-lbl">' + lbl + '</span>' +
+      '</span>';
+  }
+
+  return '<div class="ladder-row">' +
+    '<span class="ladder-row-label">' +
+      '<span class="ladder-row-swatch" style="background:' + colStr + '"></span>' +
+      name +
+    '</span>' +
+    '<span class="ladder-nucleus-track" style="width:' + pxAtom + 'px;">' +
+      '<span class="ladder-nucleus-bar" style="left:0; width:' + Math.max(pxNucleus, 0.5) + 'px; background:' + colStr + ';"></span>' +
+      ticks +
+    '</span>' +
+    '<span class="ladder-row-px">' + Math.round(pxNucleus) + ' px</span>' +
+    '<span class="ladder-row-value">' + label + '</span>' +
+    '</div>';
+}
+
 function renderLadder() {
   const el = getElement();
   const section = document.getElementById("ladder-section");
