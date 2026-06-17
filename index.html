@@ -316,11 +316,6 @@
       box-shadow: none; filter: none; opacity: 0.55;
     }
 
-    .progress-track {
-      width: 100%; height: 8px; background: var(--bg-input); border-radius: 5px;
-      overflow: hidden; margin-top: 8px; border: 1px solid var(--border-main);
-    }
-    .progress-fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.25s ease; }
 
     /* ---------- Tarjetas plegables ---------- */
     .collapsible-card {
@@ -399,10 +394,12 @@
       height: var(--ladder-bar-h); flex-shrink: 0; border-radius: 3px;
     }
     .ladder-row-px {
+      display: none; /* oculto por defecto; visible con .show-px */
       flex-shrink: 0; font-size: var(--fs-ladder); color: var(--text-muted);
       font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap;
       margin-right: 4px; opacity: 0.7;
     }
+    .ladder-section.show-px .ladder-row-px { display: inline-block; }
     .ladder-row-value {
       flex-shrink: 0; font-size: var(--fs-ladder); color: var(--text-muted);
       font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap;
@@ -431,6 +428,8 @@
     }
     .dropdown-card .control-group { margin-bottom: 12px; }
     .dropdown-card label { font-size: 12.5px; }
+    .dropdown-card .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .dropdown-card input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
     .dropdown-card select { font-size: 13.5px; padding: 9px 32px 9px 12px; }
 
     /* ---------- Responsivo ---------- */
@@ -487,10 +486,9 @@
       <div class="control-card">
         <h2>Viaje de zoom</h2>
         <div class="zoom-btn-row">
-          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Vuelve un salto atrás, hacia el núcleo">➕ Acercar (÷10)</button>
-          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto más, ×10">➖ Alejar (×10)</button>
+          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Vuelve un salto atrás, hacia el núcleo">➕ Acercar</button>
+          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto más">➖ Alejar</button>
         </div>
-        <div class="progress-track"><div class="progress-fill" id="ui-progress-fill" style="width:0%"></div></div>
         <p class="field-hint" id="ui-progress-text">Salto 0 de 0</p>
       </div>
 
@@ -508,6 +506,17 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <div class="dropdown-card">
+          <h3>Visualización</h3>
+          <div class="control-group">
+            <label class="checkbox-label" for="ui-show-intermediate">
+              <input type="checkbox" id="ui-show-intermediate" checked> Mostrar líneas de zoom intermedias
+            </label>
+          </div>
+          <div class="control-group">
+            <label class="checkbox-label" for="ui-show-px">
+              <input type="checkbox" id="ui-show-px"> Mostrar píxeles en las barras
+            </label>
+          </div>
           <h3>Apariencia</h3>
           <div class="control-group">
             <label>Tema</label>
@@ -534,7 +543,7 @@
     </div>
 
     <div class="ladder-section" id="ladder-section">
-      <p class="ladder-empty">Comparación a escala real — pulsa "Alejar (×10)" para ir añadiendo líneas.</p>
+      <p class="ladder-empty">Comparación a escala real — pulsa "Alejar" para ir añadiendo líneas.</p>
     </div>
   </div>
 

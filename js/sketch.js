@@ -85,6 +85,7 @@ ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
 let currentElementId = "H";
 let clickIndex = 0; // nº de saltos de zoom-out realizados
 let nucleonLayoutCache = null;
+let nucleonAnim = null; // { elementId, particles: [{x,y,vx,vy,type}] } coords normalizadas (1 = nucleusR)
 let electronAngles = [];
 let ladderScalePx = BASE_PX;
 
@@ -277,7 +278,7 @@ function draw() {
 
   const { cx, cy, atomR } = atomLayout();
   if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
-    drawNucleusInfoBox(theme);
+    drawNucleusInfoBox(theme, cx, cy);
   }
 }
 
@@ -330,31 +331,45 @@ function drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI) {
   const nucleusR = (el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI);
   if (nucleusR < 0.5) return;
 
+  const red = stepColor(0);
+
+  if (!nucleonAnim || nucleonAnim.elementId !== el.id) initNucleonAnim(el);
+  updateNucleonAnim(deltaTime / 1000);
+
   push();
-  noStroke();
+
   if (nucleusR < 5) {
-    fill(PROTON_COLOR[0], PROTON_COLOR[1], PROTON_COLOR[2]);
+    noStroke();
+    fill(red[0], red[1], red[2]);
     circle(cx, cy, Math.max(1, nucleusR * 2));
   } else {
-    const points = getNucleonLayout(el);
-    // Tamaño de cada nucleón: toca a sus vecinos en el empaquetamiento
+    // Circunferencia del núcleo
+    stroke(red[0], red[1], red[2]);
+    strokeWeight(1.5);
+    noFill();
+    circle(cx, cy, nucleusR * 2);
+
+    // Nucleones animados
     const dotDiam = Math.max(2, Math.min(2 * nucleusR / Math.sqrt(el.A), 1.8 * nucleusR));
-    for (const pt of points) {
-      const col = pt.type === 'p' ? PROTON_COLOR : NEUTRON_COLOR;
+    noStroke();
+    for (const p of nucleonAnim.particles) {
+      const col = p.type === 'p' ? PROTON_COLOR : NEUTRON_COLOR;
       fill(col[0], col[1], col[2]);
-      circle(cx + pt.x * nucleusR, cy + pt.y * nucleusR, dotDiam);
+      circle(cx + p.x * nucleusR, cy + p.y * nucleusR, dotDiam);
     }
+
     // Etiqueta bajo el núcleo cuando cabe
     if (nucleusR > 20) {
       const ink = inkText(uiCache.theme);
+      noStroke();
       fill(ink[0], ink[1], ink[2]);
       textAlign(CENTER, TOP);
       textSize(Math.min(12, nucleusR * 0.25));
       textStyle(NORMAL);
-      const lbl = el.Z + "p · " + el.N + "n";
-      text(lbl, cx, cy + nucleusR + 4);
+      text(el.Z + "p · " + el.N + "n", cx, cy + nucleusR + 4);
     }
   }
+
   pop();
 }
 
@@ -368,10 +383,18 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
   const animating = zoomAnimDir !== 0;
   const y = cy + atomR + 24;
 
+  const ARROW_HEAD = 14; // profundidad de la cabeza de flecha en px
   if (nucleusVisible) {
-    // Núcleo visible: flecha roja al diámetro del núcleo
-    drawCotaLine(cx, y, nucleusR, stepColor(0),
-      "Ø " + formatLength(el.nucleusDiameterM), "Núcleo de " + el.name, ink, false);
+    // Núcleo visible: si el diámetro en px < 4× cabeza de flecha, usar cota con
+    // triángulos hacia adentro; si no, flecha normal.
+    const col = stepColor(0);
+    const diam = "Ø " + formatLength(el.nucleusDiameterM);
+    const nom  = "Núcleo de " + el.name;
+    if (nucleusR < 2 * ARROW_HEAD) {
+      drawCotaDimension(cx, y, nucleusR, col, diam, nom, ink);
+    } else {
+      drawCotaLine(cx, y, nucleusR, col, diam, nom, ink, false);
+    }
 
   } else if (!animating) {
     // Estado estático: una sola flecha
@@ -444,29 +467,114 @@ function drawCotaLine(cx, y, halfPx, col, diamLabel, nameLabel, ink, noLabel) {
   }
 }
 
-// Recuadro superior derecho que advierte de que el núcleo no es visible aquí.
-function drawNucleusInfoBox(theme) {
-  const card = cardColors(theme);
-  const msg = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
-  const boxW = Math.min(252, Math.max(176, width * 0.36));
-  const pad = 12;
-  const x = width - boxW - 14;
-  const y = 20; // alejado del engranaje para no tapar órbita
-  const boxH = 70;
-
+// Cota con triángulos hacia adentro: se usa cuando el núcleo es visible pero
+// su diámetro en px < 4 × cabeza de flecha (halfPx < 2·ARROW_HEAD).
+// Las puntas de los triángulos quedan en x1/x2; las bases sobresalen al exterior.
+function drawCotaDimension(cx, y, halfPx, col, diamLabel, nameLabel, ink) {
+  const x1 = cx - halfPx, x2 = cx + halfPx;
+  const HEAD = 14, TICK = 10;
   push();
+  stroke(col[0], col[1], col[2]);
+  strokeWeight(1.5);
+  line(x1, y, x2, y);              // línea horizontal
+  line(x1, y - TICK, x1, y + TICK); // marca vertical izquierda
+  line(x2, y - TICK, x2, y + TICK); // marca vertical derecha
+  noStroke();
+  fill(col[0], col[1], col[2]);
+  // triángulo izquierdo: punta en x1, base al exterior (izquierda)
+  triangle(x1, y, x1 - HEAD, y - 7, x1 - HEAD, y + 7);
+  // triángulo derecho: punta en x2, base al exterior (derecha)
+  triangle(x2, y, x2 + HEAD, y - 7, x2 + HEAD, y + 7);
+  pop();
+
+  if (diamLabel) {
+    push();
+    textAlign(CENTER, BOTTOM);
+    textStyle(BOLD);
+    textSize(12);
+    fill(col[0], col[1], col[2]);
+    text(diamLabel, cx, y - 5);
+    if (nameLabel) {
+      textAlign(CENTER, TOP);
+      textSize(13.5);
+      fill(ink[0], ink[1], ink[2]);
+      text(nameLabel, cx, y + 12);
+    }
+    textStyle(NORMAL);
+    pop();
+  }
+}
+
+// Recuadro superior derecho que advierte de que el núcleo no es visible aquí.
+// Flecha roja desde el borde del recuadro hasta el centro del átomo (nucCx, nucCy).
+function drawNucleusInfoBox(theme, nucCx, nucCy) {
+  const card = cardColors(theme);
+  const red  = stepColor(0);
+  const msg  = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
+  const boxW = Math.min(252, Math.max(176, width * 0.36));
+  const pad  = 12;
+  const x    = width - boxW - 14;
+  const y    = 20;
+
+  // Altura dinámica: simular word-wrap para contar líneas reales.
+  push();
+  textSize(11.5);
+  textLeading(15);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 15 + pad + 16;
+
+  // Punto de anclaje en el borde del recuadro más cercano a (nucCx, nucCy).
+  let anchorX, anchorY;
+  if (nucCx < x) {
+    anchorX = x;
+    anchorY = Math.max(y, Math.min(y + boxH, nucCy));
+  } else if (nucCx > x + boxW) {
+    anchorX = x + boxW;
+    anchorY = Math.max(y, Math.min(y + boxH, nucCy));
+  } else {
+    anchorX = Math.max(x, Math.min(x + boxW, nucCx));
+    anchorY = nucCy < y ? y : y + boxH;
+  }
+
+  // Dirección hacia el núcleo.
+  const dx = nucCx - anchorX, dy = nucCy - anchorY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const ux = dx / dist, uy = dy / dist;
+
+  // Cabeza de flecha: triángulo pequeño con punta a 4 px del centro.
+  const GAP = 4, DEPTH = 8, HALF = 4;
+  const tipX = nucCx - ux * GAP,        tipY  = nucCy - uy * GAP;
+  const baseX = tipX - ux * DEPTH,      baseY = tipY  - uy * DEPTH;
+  const perpX = -uy * HALF,             perpY = ux * HALF;
+
+  // 1. Flecha (primero, para que el recuadro tape el inicio de la línea).
+  stroke(red[0], red[1], red[2]);
+  strokeWeight(1.5);
+  line(anchorX, anchorY, baseX, baseY);
+  noStroke();
+  fill(red[0], red[1], red[2]);
+  triangle(tipX, tipY, baseX + perpX, baseY + perpY, baseX - perpX, baseY - perpY);
+
+  // 2. Recuadro (encima de la línea en el punto de anclaje).
   rectMode(CORNER);
   stroke(card.border[0], card.border[1], card.border[2]);
   strokeWeight(1);
   fill(card.bg[0], card.bg[1], card.bg[2]);
   rect(x, y, boxW, boxH, 9);
 
-  // Marca roja (color del núcleo) en el borde izquierdo del recuadro.
+  // Marca roja en el borde izquierdo.
   noStroke();
-  const red = stepColor(0);
   fill(red[0], red[1], red[2]);
   rect(x + 1, y + 9, 3, boxH - 18, 2);
 
+  // Texto.
   fill(card.ink[0], card.ink[1], card.ink[2]);
   textAlign(LEFT, TOP);
   textStyle(NORMAL);
@@ -508,6 +616,57 @@ function getNucleonLayout(el) {
   return nucleonLayoutCache.points;
 }
 
+function initNucleonAnim(el) {
+  const points = buildNucleonLayout(el);
+  nucleonAnim = {
+    elementId: el.id,
+    particles: points.map(p => ({
+      type: p.type,
+      x: p.x * 0.85,
+      y: p.y * 0.85,
+      vx: random(-0.5, 0.5),
+      vy: random(-0.5, 0.5),
+    }))
+  };
+}
+
+// Movimiento browniano confinado dentro del radio del núcleo (coordenadas normalizadas).
+function updateNucleonAnim(dt) {
+  if (!nucleonAnim) return;
+  const KICK   = 15.0; // amplitud del impulso aleatorio (radio/s)
+  const DAMP   = 0.3;  // tasa de amortiguación continua (1/s)
+  const WALL   = 0.84; // radio de la pared blanda (normalizado)
+  const WALL_K = 8.0;  // rigidez de la pared blanda
+
+  for (const p of nucleonAnim.particles) {
+    p.vx += random(-1, 1) * KICK * dt;
+    p.vy += random(-1, 1) * KICK * dt;
+
+    const r = Math.sqrt(p.x * p.x + p.y * p.y);
+    if (r > WALL && r > 0) {
+      const excess = r - WALL;
+      p.vx -= (p.x / r) * WALL_K * excess * dt;
+      p.vy -= (p.y / r) * WALL_K * excess * dt;
+    }
+
+    const decay = Math.exp(-DAMP * dt);
+    p.vx *= decay;
+    p.vy *= decay;
+
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const rNew = Math.sqrt(p.x * p.x + p.y * p.y);
+    if (rNew > 0.93) {
+      p.x *= 0.93 / rNew;
+      p.y *= 0.93 / rNew;
+      const nx = p.x / 0.93, ny = p.y / 0.93;
+      const dot = p.vx * nx + p.vy * ny;
+      if (dot > 0) { p.vx -= dot * nx; p.vy -= dot * ny; }
+    }
+  }
+}
+
 // Texto de apoyo con ajuste de línea (reutilizable en pasos posteriores).
 function drawCaption(theme, x, y, str, col, align, maxWidth) {
   const w = maxWidth || 160;
@@ -535,12 +694,13 @@ function populateElementSelect() {
 function renderElementFacts() {
   const el = getElement();
   const box = document.getElementById("element-facts");
+  const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
   const rows = [
     ["Protones (Z)", el.Z],
     ["Neutrones (N)", el.N],
-    ["Número de masa (A)", el.A],
     ["Diámetro del núcleo", formatLength(el.nucleusDiameterM)],
     ["Diámetro del átomo", formatLength(el.atomDiameterM)],
+    ["Tasa átomo / núcleo", ratio + " : 1"],
     ["Capas electrónicas", el.shells.length + " (" + el.shells.map((c, i) => SHELL_NAMES[i] + ":" + c).join(", ") + ")"],
   ];
   box.innerHTML = rows.map((r) => '<div class="fact-row"><span>' + r[0] + '</span><span class="fact-value">' + r[1] + "</span></div>").join("");
@@ -553,9 +713,10 @@ function renderJourneyProgress() {
   const text = document.getElementById("ui-progress-text");
   const pct = total === 0 ? 50 : 50 + Math.round((clickIndex / total) * 50);
   if (fill) fill.style.width = pct + "%";
+  const factor = n => Math.pow(10, n).toLocaleString('es-ES');
   const label = clickIndex === 0 ? "Escala natural"
-    : clickIndex > 0 ? "Alejado ×10" + toSuperscript(clickIndex)
-    : "Acercado ×10" + toSuperscript(-clickIndex);
+    : clickIndex > 0 ? "Alejado ×" + factor(clickIndex)
+    : "Acercado ×" + factor(-clickIndex);
   if (text) text.innerText = label;
 
   const animating = zoomAnimDir !== 0;
@@ -597,9 +758,12 @@ function renderLadder() {
   const stepsIn = Math.max(0, -clickIndex);
   const numBars = Math.min(stepsIn, nucleusStep) + 1;
 
+  const showIntermediate = document.getElementById("ui-show-intermediate")?.checked ?? true;
+
   const rows = [];
   for (let j = 0; j < numBars; j++) {
     const isNucleus = (j === nucleusStep);
+    if (!showIntermediate && j > 0 && !isNucleus) continue;
     let physDiam, col, name;
     if (isNucleus) {
       physDiam = el.nucleusDiameterM;
@@ -643,6 +807,7 @@ function setupUIEventListeners() {
   document.getElementById("ui-element-select").addEventListener("change", (e) => {
     currentElementId = e.target.value;
     electronAngles = [];
+    nucleonAnim = null;
     resetJourney();
   });
 
@@ -669,6 +834,18 @@ function setupUIEventListeners() {
   document.getElementById("ui-btn-reset").addEventListener("click", () => {
     resetJourney();
   });
+
+  const showIntermediateCheck = document.getElementById("ui-show-intermediate");
+  if (showIntermediateCheck) {
+    showIntermediateCheck.addEventListener("change", renderLadder);
+  }
+
+  const showPxCheck = document.getElementById("ui-show-px");
+  if (showPxCheck) {
+    showPxCheck.addEventListener("change", () => {
+      document.getElementById("ladder-section").classList.toggle("show-px", showPxCheck.checked);
+    });
+  }
 
   const infoCard = document.getElementById("ui-panel-info");
   document.getElementById("ui-info-trigger").addEventListener("click", () => {
