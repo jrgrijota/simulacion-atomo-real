@@ -51,6 +51,18 @@ const NEUTRON_COLOR = [148, 163, 184];
 
 const BASE_PX = 100; // tamaño en píxeles del núcleo (salto 0) a escala "cómoda"
 
+// Colores de la flecha de referencia para cada salto de zoom-out (índice = clickIndex)
+const ZOOM_ARROW_COLORS = [
+  null, // índice 0 → se usa accentColor (azul)
+  { dark: [251, 146, 60],  light: [190,  95, 20] },  // 1 naranja
+  { dark: [52,  211, 153], light: [10,  140, 80] },  // 2 esmeralda
+  { dark: [6,   182, 212], light: [12,  120,150] },  // 3 cian
+  { dark: [168,  85, 247], light: [120,  40,190] },  // 4 violeta
+  { dark: [244,  63,  94], light: [180,  20, 60] },  // 5 rosa
+  { dark: [20,  184, 166], light: [10,  120,110] },  // 6 teal
+  { dark: [234, 179,   8], light: [160, 120,  5] },  // 7 amarillo
+];
+
 // ---------------------------------------------------------------------
 // Cálculo derivado de cada elemento (radios reales en metros)
 // ---------------------------------------------------------------------
@@ -71,13 +83,15 @@ ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
 // Estado global
 // ---------------------------------------------------------------------
 let currentElementId = "H";
-let clickIndex = 0; // 0 = solo el núcleo, sin saltos todavía (zoom: paso posterior)
-let nucleonLayoutCache = null; // posiciones cacheadas de nucleones (para pasos posteriores)
-let electronAngles = []; // fase de giro de los electrones por capa (animación)
-
-// Escala de la franja de líneas (DOM). En el paso 1 solo hay una línea (núcleo)
-// a tamaño cómodo (BASE_PX).
+let clickIndex = 0; // nº de saltos de zoom-out realizados
+let nucleonLayoutCache = null;
+let electronAngles = [];
 let ladderScalePx = BASE_PX;
+
+// Animación de zoom continua
+let zoomAnimT = 0;    // progreso lineal 0→1 del paso actual
+let zoomAnimDir = 0;  // +1 = alejando, -1 = acercando, 0 = en reposo
+const ZOOM_DURATION = 0.75; // segundos por paso de zoom
 
 const uiCache = { theme: "dark" };
 let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría, recalculada en resize
@@ -139,6 +153,12 @@ function rgbStr(arr, alpha) {
   return alpha === undefined ? "rgb(" + arr.join(",") + ")" : "rgba(" + arr.join(",") + "," + alpha + ")";
 }
 function stepColor(i) { return categoryColor(STEP_COLORS[i % STEP_COLORS.length]); }
+function zoomArrowColor(stepIndex) {
+  const absIdx = Math.abs(stepIndex);
+  if (absIdx === 0) return accentColor(uiCache.theme);
+  const entry = ZOOM_ARROW_COLORS[absIdx % ZOOM_ARROW_COLORS.length] || ZOOM_ARROW_COLORS[1];
+  return categoryColor(entry);
+}
 
 // Colores derivados del tema actual (equivalentes a las variables CSS).
 function mutedText(theme) {
@@ -236,42 +256,59 @@ function draw() {
   const theme = uiCache.theme;
   background(theme === "light" ? [248, 250, 252] : theme === "high-contrast" ? [0, 0, 0] : [11, 12, 16]);
   const el = getElement();
-  drawAtomView(theme, el);
-  drawNucleusInfoBox(theme);
+
+  // Avanzar animación de zoom
+  if (zoomAnimDir !== 0) {
+    zoomAnimT += deltaTime / 1000 / ZOOM_DURATION;
+    if (zoomAnimT >= 1) {
+      zoomAnimT = 0;
+      clickIndex += zoomAnimDir;
+      zoomAnimDir = 0;
+      refreshAll();
+    }
+  }
+
+  // Ease in-out cúbico para suavizar el movimiento
+  const t = zoomAnimT;
+  const easeT = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+  const effectiveCI = clickIndex + zoomAnimDir * easeT;
+
+  drawAtomView(theme, el, effectiveCI);
+
+  const { cx, cy, atomR } = atomLayout();
+  if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
+    drawNucleusInfoBox(theme);
+  }
 }
 
 // =====================================================================
 // Zona de simulación (paso 1): el átomo completo + cota del diámetro
 // =====================================================================
 
-function drawAtomView(theme, el) {
-  const cx = width / 2;
-  const topMargin = 26;
-  const cotaZone = 84; // espacio inferior reservado para la cota y la leyenda
-  const areaTop = topMargin;
-  const areaBottom = height - cotaZone;
-  const cy = (areaTop + areaBottom) / 2;
-  const maxR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2));
-  const atomR = maxR * 0.94;
+function drawAtomView(theme, el, effectiveCI) {
+  const { cx, cy, atomR } = atomLayout();
   const numShells = el.shells.length;
 
   const acc = accentColor(theme);
-  const mt = mutedText(theme);
+  const zoomFactor = Math.pow(10, effectiveCI);
 
-  // Avanza la fase de giro de cada capa (capas externas, más lentas).
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
   push();
   for (let s = 0; s < numShells; s++) {
-    const rs = atomR * (s + 1) / numShells;
+    const rs = atomR * (s + 1) / numShells / zoomFactor;
 
-    // Órbita (círculo de la capa)
+    // Saltar capas que sobrepasarían el lienzo (zoom in)
+    if (rs <= 0 || rs > width) {
+      electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+      continue;
+    }
+
     noFill();
     stroke(acc[0], acc[1], acc[2], 150);
     strokeWeight(1.3);
     circle(cx, cy, rs * 2);
 
-    // Electrones repartidos por la capa, girando suavemente
     const ne = el.shells[s];
     electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
     noStroke();
@@ -283,40 +320,128 @@ function drawAtomView(theme, el) {
   }
   pop();
 
-  drawDiameterCota(theme, cx, cy, atomR, el);
+  drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI);
+  drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
 }
 
-// Cota (línea de medida) del diámetro del átomo, justo debajo del dibujo, con su
-// valor real y la leyenda "Átomo de XXXXX".
-function drawDiameterCota(theme, cx, cy, atomR, el) {
-  const ink = inkText(theme);
-  const acc = accentColor(theme);
-  const y = cy + atomR + 24;
-  const x1 = cx - atomR, x2 = cx + atomR;
+// Núcleo en el centro del lienzo. Se dibuja solo cuando supera 1 px de diámetro.
+// Con radio < 5 px: punto sólido. Con radio >= 5 px: nucleones individuales.
+function drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI) {
+  const nucleusR = (el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI);
+  if (nucleusR < 0.5) return;
 
   push();
-  stroke(acc[0], acc[1], acc[2]);
-  strokeWeight(6);
-  line(x1, y, x2, y);             // línea horizontal
-  line(x1, y - 8, x1, y + 8);     // tope izquierdo
-  line(x2, y - 8, x2, y + 8);     // tope derecho
   noStroke();
-  fill(acc[0], acc[1], acc[2]);
-  triangle(x1, y, x1 + 14, y - 7, x1 + 14, y + 7); // punta hacia dentro (izq.)
-  triangle(x2, y, x2 - 14, y - 7, x2 - 14, y + 7); // punta hacia dentro (der.)
+  if (nucleusR < 5) {
+    fill(PROTON_COLOR[0], PROTON_COLOR[1], PROTON_COLOR[2]);
+    circle(cx, cy, Math.max(1, nucleusR * 2));
+  } else {
+    const points = getNucleonLayout(el);
+    // Tamaño de cada nucleón: toca a sus vecinos en el empaquetamiento
+    const dotDiam = Math.max(2, Math.min(2 * nucleusR / Math.sqrt(el.A), 1.8 * nucleusR));
+    for (const pt of points) {
+      const col = pt.type === 'p' ? PROTON_COLOR : NEUTRON_COLOR;
+      fill(col[0], col[1], col[2]);
+      circle(cx + pt.x * nucleusR, cy + pt.y * nucleusR, dotDiam);
+    }
+    // Etiqueta bajo el núcleo cuando cabe
+    if (nucleusR > 20) {
+      const ink = inkText(uiCache.theme);
+      fill(ink[0], ink[1], ink[2]);
+      textAlign(CENTER, TOP);
+      textSize(Math.min(12, nucleusR * 0.25));
+      textStyle(NORMAL);
+      const lbl = el.Z + "p · " + el.N + "n";
+      text(lbl, cx, cy + nucleusR + 4);
+    }
+  }
+  pop();
+}
+
+// Cota (línea de medida) bajo el dibujo. Durante la animación muestra dos flechas:
+// la referencia actual (que crece/mengua hasta salir del área) y la siguiente (que
+// llega hasta ocupar el tamaño final). Fuera de animación: una sola flecha.
+function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
+  const ink = inkText(theme);
+  const nucleusR = (el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI);
+  const nucleusVisible = nucleusR >= 0.5;
+  const animating = zoomAnimDir !== 0;
+  const y = cy + atomR + 24;
+
+  if (nucleusVisible) {
+    // Núcleo visible: flecha roja al diámetro del núcleo
+    drawCotaLine(cx, y, nucleusR, stepColor(0),
+      "Ø " + formatLength(el.nucleusDiameterM), "Núcleo de " + el.name, ink, false);
+
+  } else if (!animating) {
+    // Estado estático: una sola flecha
+    const col = zoomArrowColor(clickIndex);
+    const physDiam = el.atomDiameterM * Math.pow(10, clickIndex);
+    const lbl = clickIndex === 0 ? "Átomo de " + el.name
+      : clickIndex > 0 ? "Ref. ×10" + toSuperscript(clickIndex)
+      : "Ref. ÷10" + toSuperscript(-clickIndex);
+    drawCotaLine(cx, y, atomR, col, "Ø " + formatLength(physDiam), lbl, ink, false);
+
+  } else {
+    // Animación: dos flechas.
+    // La "grande" es la referencia que había antes del zoom; crece (acercar) o mengua (alejar).
+    // La "pequeña" es la próxima referencia; llega hasta atomR al finalizar el paso.
+    // Ambas se derivan de effectiveCI sin necesidad de recalcular easeT.
+
+    const halfBig = atomR * Math.pow(10, -(effectiveCI - clickIndex));
+    const nextCI  = clickIndex + zoomAnimDir;
+    const halfSmall = atomR * Math.pow(10, nextCI - effectiveCI);
+
+    // Dibujar la flecha grande solo mientras quepa en el área (o casi)
+    const areaHalf = (width - 40) / 2;
+    if (halfBig <= areaHalf * 1.05 && halfBig > 2) {
+      drawCotaLine(cx, y, halfBig, zoomArrowColor(clickIndex), null, null, ink, true);
+    }
+
+    // Dibujar la flecha pequeña (nueva referencia) siempre con etiqueta
+    const physDiam2 = el.atomDiameterM * Math.pow(10, nextCI);
+    const name2 = nextCI === 0 ? "Átomo de " + el.name
+      : nextCI > 0 ? "Ref. ×10" + toSuperscript(nextCI)
+      : "Ref. ÷10" + toSuperscript(-nextCI);
+    drawCotaLine(cx, y, halfSmall, zoomArrowColor(nextCI),
+      "Ø " + formatLength(physDiam2), name2, ink, false);
+  }
+}
+
+// Dibuja una flecha de cota centrada en cx, en la fila y, con semiancho halfPx.
+// Si noLabel=true omite el texto (para la flecha "grande" durante la animación).
+function drawCotaLine(cx, y, halfPx, col, diamLabel, nameLabel, ink, noLabel) {
+  const x1 = cx - halfPx, x2 = cx + halfPx;
+  push();
+  stroke(col[0], col[1], col[2]);
+  strokeWeight(6);
+  line(x1, y, x2, y);
+  if (halfPx > 8) {
+    line(x1, y - 8, x1, y + 8);
+    line(x2, y - 8, x2, y + 8);
+  }
+  noStroke();
+  fill(col[0], col[1], col[2]);
+  if (x1 > -50)       triangle(x1, y, x1 + 14, y - 7, x1 + 14, y + 7);
+  if (x2 < width + 50) triangle(x2, y, x2 - 14, y - 7, x2 - 14, y + 7);
   pop();
 
-  push();
-  textAlign(CENTER, BOTTOM);
-  textStyle(BOLD);
-  textSize(12);
-  fill(ink[0], ink[1], ink[2]);
-  text("Ø " + formatLength(el.atomDiameterM), cx, y - 5); // valor sobre la línea
-  textAlign(CENTER, TOP);
-  textSize(13.5);
-  text("Átomo de " + el.name, cx, y + 12);                // leyenda bajo la línea
-  textStyle(NORMAL);
-  pop();
+  if (!noLabel && diamLabel) {
+    push();
+    textAlign(CENTER, BOTTOM);
+    textStyle(BOLD);
+    textSize(12);
+    fill(col[0], col[1], col[2]);
+    text(diamLabel, cx, y - 5);
+    if (nameLabel) {
+      textAlign(CENTER, TOP);
+      textSize(13.5);
+      fill(ink[0], ink[1], ink[2]);
+      text(nameLabel, cx, y + 12);
+    }
+    textStyle(NORMAL);
+    pop();
+  }
 }
 
 // Recuadro superior derecho que advierte de que el núcleo no es visible aquí.
@@ -426,42 +551,73 @@ function renderJourneyProgress() {
   const total = maxClickIndex(el);
   const fill = document.getElementById("ui-progress-fill");
   const text = document.getElementById("ui-progress-text");
-  const pct = total === 0 ? 0 : Math.round((clickIndex / total) * 100);
+  const pct = total === 0 ? 50 : 50 + Math.round((clickIndex / total) * 50);
   if (fill) fill.style.width = pct + "%";
-  if (text) text.innerText = "Salto " + clickIndex + " de " + total;
+  const label = clickIndex === 0 ? "Escala natural"
+    : clickIndex > 0 ? "Alejado ×10" + toSuperscript(clickIndex)
+    : "Acercado ×10" + toSuperscript(-clickIndex);
+  if (text) text.innerText = label;
 
-  // Paso 1: los botones se muestran pero su funcionalidad llegará después.
+  const animating = zoomAnimDir !== 0;
   const btnOut = document.getElementById("ui-btn-zoom-out");
-  if (btnOut) { btnOut.disabled = false; btnOut.innerHTML = "➖ Alejar (×10)"; }
+  if (btnOut) btnOut.disabled = animating || clickIndex >= total;
   const btnIn = document.getElementById("ui-btn-zoom-in");
-  if (btnIn) btnIn.disabled = true; // "Acercar" deshabilitado: aún no hay zoom del que volver
+  if (btnIn) btnIn.disabled = animating || clickIndex <= -total;
 }
 
-// Franja inferior: en el paso 1, una única línea del tamaño del diámetro del átomo completo.
+function makeLadderRow(col, name, px, label) {
+  return '<div class="ladder-row">' +
+    '<span class="ladder-row-label">' +
+      '<span class="ladder-row-swatch" style="background:' + rgbStr(col) + '"></span>' +
+      name +
+    '</span>' +
+    '<span class="ladder-row-bar" style="width:' + px + 'px; background:' + rgbStr(col) + '; margin-right:6px;"></span>' +
+    '<span class="ladder-row-px">' + Math.round(px) + ' px</span>' +
+    '<span class="ladder-row-value">' + label + '</span>' +
+    '</div>';
+}
+
 function renderLadder() {
   const el = getElement();
   const section = document.getElementById("ladder-section");
-  const barColor = accentColor(uiCache.theme);
-  
-  // Calcular atomR con la misma lógica que en drawAtomView() para que la barra tenga la misma longitud
-  const topMargin = 26;
-  const cotaZone = 84;
-  const areaTop = topMargin;
-  const areaBottom = height - cotaZone;
-  const maxR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2));
-  const atomR = maxR * 0.94;
-  const atomBarPx = atomR * 2; // diámetro = 2 * radio
-  
-  // Mostrar tanto en unidades como en notación científica
-  const valueInUnits = formatLength(el.atomDiameterM);
-  const valueInScientific = formatScientificM(el.atomDiameterM);
-  
-  section.innerHTML =
-    '<div class="ladder-row">' +
-    '<span class="ladder-row-label"><span class="ladder-row-swatch" style="background:' + rgbStr(barColor) + '"></span>Átomo de ' + el.name + '</span>' +
-    '<span class="ladder-row-bar" style="width:' + atomBarPx + "px; background:" + rgbStr(barColor) + '; margin-right: 12px;"></span>' +
-    '<span class="ladder-row-value" style="flex-shrink: 0; margin-left: auto;">' + valueInUnits + " / " + valueInScientific + "</span>" +
-    "</div>";
+  const { atomR } = atomLayout();
+  const n = maxClickIndex(el);
+
+  // Paso en que el núcleo se hace visible en canvas (nucleusR >= 0.5 px).
+  // Ese paso añade la barra roja del núcleo y no se añaden más barras a partir de entonces.
+  let nucleusStep = n;
+  for (let k = 1; k <= n; k++) {
+    if ((el.nucleusDiameterM / el.atomDiameterM) * atomR * Math.pow(10, k) >= 0.5) {
+      nucleusStep = k;
+      break;
+    }
+  }
+
+  // j=0 (átomo) siempre visible; cada zoom-in añade una barra más hasta nucleusStep.
+  const stepsIn = Math.max(0, -clickIndex);
+  const numBars = Math.min(stepsIn, nucleusStep) + 1;
+
+  const rows = [];
+  for (let j = 0; j < numBars; j++) {
+    const isNucleus = (j === nucleusStep);
+    let physDiam, col, name;
+    if (isNucleus) {
+      physDiam = el.nucleusDiameterM;
+      col = stepColor(0); // rojo — mismo que la cota del núcleo en el canvas
+      name = "Núcleo de " + el.name;
+    } else {
+      // physDiam coincide con lo que representa la flecha del canvas cuando clickIndex = -j
+      physDiam = el.atomDiameterM * Math.pow(10, -j);
+      col = zoomArrowColor(-j); // idéntico al color de la flecha en ese paso de zoom
+      name = j === 0 ? "Átomo de " + el.name : "Ref. ÷10" + toSuperscript(j);
+    }
+    // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
+    const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
+    const label = formatLength(physDiam) + " / " + formatScientificM(physDiam);
+    rows.push(makeLadderRow(col, name, Math.max(px, 0.5), label));
+  }
+
+  section.innerHTML = rows.join('');
   section.scrollLeft = 0;
 }
 
@@ -477,6 +633,8 @@ function refreshAll() {
 
 function resetJourney() {
   clickIndex = 0;
+  zoomAnimT = 0;
+  zoomAnimDir = 0;
   ladderScalePx = BASE_PX;
   refreshAll();
 }
@@ -488,9 +646,25 @@ function setupUIEventListeners() {
     resetJourney();
   });
 
-  // Zoom: funcionalidad pendiente (paso posterior). De momento, sin efecto.
-  document.getElementById("ui-btn-zoom-out").addEventListener("click", () => { /* TODO: alejar ×10 */ });
-  document.getElementById("ui-btn-zoom-in").addEventListener("click", () => { /* TODO: acercar ÷10 */ });
+  document.getElementById("ui-btn-zoom-out").addEventListener("click", () => {
+    if (zoomAnimDir !== 0) return;
+    const el = getElement();
+    if (clickIndex < maxClickIndex(el)) {
+      zoomAnimDir = +1;
+      zoomAnimT = 0;
+      renderJourneyProgress(); // deshabilitar botones de inmediato
+    }
+  });
+
+  document.getElementById("ui-btn-zoom-in").addEventListener("click", () => {
+    if (zoomAnimDir !== 0) return;
+    const el = getElement();
+    if (clickIndex > -maxClickIndex(el)) {
+      zoomAnimDir = -1;
+      zoomAnimT = 0;
+      renderJourneyProgress();
+    }
+  });
 
   document.getElementById("ui-btn-reset").addEventListener("click", () => {
     resetJourney();
