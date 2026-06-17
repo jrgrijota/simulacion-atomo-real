@@ -726,6 +726,32 @@ function renderJourneyProgress() {
   if (btnIn) btnIn.disabled = animating || clickIndex <= -total;
 }
 
+function makeNuclearRulerRow(col, name, pxNucleus, pxAtom, label) {
+  const tickInterval = 100 * pxNucleus;
+  const numTicks = tickInterval >= 6 ? Math.min(Math.floor(pxAtom / tickInterval), 2000) : 0;
+
+  let innerHtml = '<div class="ladder-nucleus-bar" style="width:' + Math.max(pxNucleus, 0.5) + 'px; background:' + rgbStr(col) + ';"></div>';
+  for (let k = 1; k <= numTicks; k++) {
+    innerHtml +=
+      '<div class="ladder-nucleus-tick" style="left:' + (k * tickInterval) + 'px;">' +
+        '<span class="ladder-nucleus-tick-lbl">' + (k * 100) + '·D</span>' +
+        '<div class="ladder-nucleus-tick-line"></div>' +
+      '</div>';
+  }
+
+  return '<div class="ladder-row">' +
+    '<span class="ladder-row-label">' +
+      '<span class="ladder-row-swatch" style="background:' + rgbStr(col) + '"></span>' +
+      name +
+    '</span>' +
+    '<div class="ladder-nucleus-track" style="width:' + pxAtom + 'px;">' +
+      innerHtml +
+    '</div>' +
+    '<span class="ladder-row-px">' + Math.round(pxNucleus) + ' px</span>' +
+    '<span class="ladder-row-value">' + label + '</span>' +
+    '</div>';
+}
+
 function makeLadderRow(col, name, px, label) {
   return '<div class="ladder-row">' +
     '<span class="ladder-row-label">' +
@@ -778,7 +804,12 @@ function renderLadder() {
     // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
     const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
     const label = formatLength(physDiam) + " / " + formatScientificM(physDiam);
-    rows.push(makeLadderRow(col, name, Math.max(px, 0.5), label));
+    if (isNucleus) {
+      const pxAtom = 2 * atomR * Math.pow(10, -clickIndex);
+      rows.push(makeNuclearRulerRow(col, name, px, pxAtom, label));
+    } else {
+      rows.push(makeLadderRow(col, name, Math.max(px, 0.5), label));
+    }
   }
 
   section.innerHTML = rows.join('');
