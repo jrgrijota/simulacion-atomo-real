@@ -92,13 +92,14 @@
     }
 
     [data-theme="light"] {
-      --bg-body: #c8d0da;
-      --bg-container: #d8dfe8;
-      --bg-card: #cdd4de;
-      --bg-card-hover: #c2cad5;
-      --bg-input: #dce2ea;
-      --border-main: #8fa0b2;
-      --border-strong: #5f7488;
+      /* Jerarquía de elevación idéntica al tema oscuro: body < container < card */
+      --bg-body: #b8c4d0;
+      --bg-container: #c8d4e0;
+      --bg-card: #dde7f2;
+      --bg-card-hover: #e5eef8;
+      --bg-input: #cdd7e4;
+      --border-main: #94a8bc;
+      --border-strong: #6a8299;
       --border-canvas: #3a5068;
       --text-main: #0c1a28;
       --text-muted: #2c4258;
@@ -108,10 +109,10 @@
       --accent-soft: rgba(26, 82, 190, 0.16);
       --success: #0a7a50;
       --success-hover: #086040;
-      --btn-secondary: #bac3cf;
-      --btn-secondary-hover: #adb7c4;
-      --shadow-card: 0 1px 3px rgba(12,26,40,0.16);
-      --shadow-pop: 0 12px 28px -6px rgba(12,26,40,0.34);
+      --btn-secondary: #c0ccda;
+      --btn-secondary-hover: #b0bcc8;
+      --shadow-card: 0 2px 6px rgba(12,26,40,0.14);
+      --shadow-pop: 0 12px 28px -6px rgba(12,26,40,0.26);
     }
 
     [data-theme="high-contrast"] {
@@ -301,6 +302,14 @@
       height: 100%; width: 0%;
       background: linear-gradient(90deg, var(--accent) 0%, var(--success) 100%);
       border-radius: 3px; transition: width 0.4s ease;
+    }
+    .zoom-progress-fill.is-complete {
+      background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+      animation: progress-complete 2s ease-in-out infinite;
+    }
+    @keyframes progress-complete {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
     }
     .zoom-progress-meta {
       display: flex; justify-content: space-between; align-items: center;
@@ -504,11 +513,19 @@
         <div class="collapsible-content">
           <div class="info-block">
             <div class="info-label">Lo que ves</div>
-            <p class="info-text">El <strong>átomo completo</strong> con todas sus capas de electrones. Bajo el dibujo, una cota marca su <strong>diámetro real</strong>. El <strong>núcleo</strong> está en el centro, pero a esta escala es demasiado pequeño para dibujarlo: por eso no aparece.</p>
+            <p class="info-text">El <strong>átomo completo</strong> a escala natural, con sus capas de electrones. La cota bajo el dibujo marca su <strong>diámetro real</strong>. El núcleo está en el centro, pero es tan pequeño que aquí no se puede dibujar.</p>
+          </div>
+          <div class="info-block">
+            <div class="info-label">El viaje de zoom</div>
+            <p class="info-text">Cada pulsación de <strong>Acercar</strong> amplía la imagen <strong>×10</strong>. En 5 saltos pasas de ver el átomo entero a ver el núcleo. La diferencia entre ambos es un factor de <strong>100.000</strong>.</p>
           </div>
           <div class="info-block">
             <div class="info-label">La franja inferior</div>
-            <p class="info-text">Muestra, como referencia, una línea del tamaño del <strong>diámetro del núcleo</strong>. Compárala con el diámetro del átomo de arriba para hacerte una idea de la diferencia.</p>
+            <p class="info-text">Cada barra de color es un tamaño <strong>a escala real</strong>. Compara su longitud con el diámetro del átomo para hacerte una idea de cuánto más pequeño es el núcleo.</p>
+          </div>
+          <div class="info-block">
+            <div class="info-label">Teclado</div>
+            <p class="info-text">Usa <strong>→</strong> y <strong>←</strong> para acercar y alejar. Pulsa <strong>R</strong> para reiniciar el viaje.</p>
           </div>
         </div>
       </div>

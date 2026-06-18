@@ -176,7 +176,7 @@ function accentColor(theme) {
   return theme === "light" ? [26, 82, 190] : theme === "high-contrast" ? [255, 255, 0] : [96, 165, 250];
 }
 function cardColors(theme) {
-  if (theme === "light") return { bg: [205, 212, 222], border: [143, 160, 178], ink: [12, 26, 40] };
+  if (theme === "light") return { bg: [221, 231, 242], border: [148, 168, 188], ink: [12, 26, 40] };
   if (theme === "high-contrast") return { bg: [24, 24, 24], border: [255, 255, 255], ink: [255, 255, 255] };
   return { bg: [30, 35, 52], border: [43, 49, 71], ink: [238, 242, 248] };
 }
@@ -845,9 +845,14 @@ function renderJourneyProgress() {
   const steps = document.getElementById("ui-progress-steps");
 
   const pct = total === 0 ? 0 : Math.max(0, Math.round((-clickIndex / total) * 100));
-  if (fill) fill.style.width = pct + "%";
+  if (fill) {
+    fill.style.width = pct + "%";
+    fill.classList.toggle("is-complete", total > 0 && clickIndex === -total);
+  }
 
-  const label = clickIndex === 0 ? "Escala natural"
+  const atNucleus = total > 0 && clickIndex === -total;
+  const label = atNucleus ? "¡Núcleo alcanzado! ×" + Math.pow(10, total).toLocaleString('es-ES')
+    : clickIndex === 0 ? "Escala natural"
     : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
     : "Tamaño original × " + Math.pow(10, -clickIndex).toLocaleString('es-ES');
   if (text) text.innerText = label;
@@ -932,7 +937,7 @@ function renderLadder() {
       // physDiam coincide con lo que representa la flecha del canvas cuando clickIndex = -j
       physDiam = el.atomDiameterM * Math.pow(10, -j);
       col = zoomArrowColor(-j); // idéntico al color de la flecha en ese paso de zoom
-      name = j === 0 ? "Átomo de " + el.name : "Ref. ÷10" + toSuperscript(j);
+      name = j === 0 ? "Átomo de " + el.name : "1/" + Math.pow(10, j).toLocaleString('es-ES') + " del átomo";
     }
     // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
     const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
@@ -1014,6 +1019,17 @@ function setupUIEventListeners() {
   const infoCard = document.getElementById("ui-panel-info");
   document.getElementById("ui-info-trigger").addEventListener("click", () => {
     infoCard.classList.toggle("is-expanded");
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") {
+      document.getElementById("ui-btn-zoom-in").click();
+    } else if (e.key === "ArrowLeft") {
+      document.getElementById("ui-btn-zoom-out").click();
+    } else if (e.key === "r" || e.key === "R") {
+      document.getElementById("ui-btn-reset").click();
+    }
   });
 }
 
