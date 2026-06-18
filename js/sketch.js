@@ -84,10 +84,8 @@ ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
 // ---------------------------------------------------------------------
 let currentElementId = "H";
 let clickIndex = 0; // nº de saltos de zoom-out realizados
-let nucleonLayoutCache = null;
 let nucleonAnim = null; // { elementId, particles: [{x,y,vx,vy,type}] } coords normalizadas (1 = nucleusR)
 let electronAngles = [];
-let ladderScalePx = BASE_PX;
 
 // Animación de zoom continua
 let zoomAnimT = 0;    // progreso lineal 0→1 del paso actual
@@ -208,6 +206,7 @@ function setup() {
   const h = holder && holder.offsetHeight ? holder.offsetHeight : 600;
   const canvas = createCanvas(w, h);
   canvas.parent("canvas-holder");
+  textFont('system-ui, -apple-system, "Segoe UI", sans-serif');
   recomputeLayout();
   populateElementSelect();
   setupAppearanceEventListeners();
@@ -746,13 +745,6 @@ function buildNucleonLayout(el) {
   });
 }
 
-function getNucleonLayout(el) {
-  if (!nucleonLayoutCache || nucleonLayoutCache.id !== el.id) {
-    nucleonLayoutCache = { id: el.id, points: buildNucleonLayout(el) };
-  }
-  return nucleonLayoutCache.points;
-}
-
 function initNucleonAnim(el) {
   const points = buildNucleonLayout(el);
   nucleonAnim = {
@@ -842,20 +834,6 @@ function drawNucleusReachedBox(theme, el) {
   textLeading(16);
   textWrap(WORD);
   text(msg, x + pad, y + 12, boxW - pad - 10);
-  pop();
-}
-
-// Texto de apoyo con ajuste de línea (reutilizable en pasos posteriores).
-function drawCaption(theme, x, y, str, col, align, maxWidth) {
-  const w = maxWidth || 160;
-  let boxX = align === LEFT ? x : x - w / 2;
-  boxX = constrain(boxX, 2, Math.max(2, width - w - 2));
-  push();
-  textAlign(align === LEFT ? LEFT : CENTER, TOP);
-  textSize(10.5);
-  textWrap(WORD);
-  fill(col[0], col[1], col[2]);
-  text(str, boxX, y, w);
   pop();
 }
 
@@ -1016,7 +994,6 @@ function resetJourney() {
   clickIndex = 0;
   zoomAnimT = 0;
   zoomAnimDir = 0;
-  ladderScalePx = BASE_PX;
   const ladderEl = document.getElementById("ladder-section");
   if (ladderEl) ladderEl.scrollLeft = 0;
   refreshAll();
