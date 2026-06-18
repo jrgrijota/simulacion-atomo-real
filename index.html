@@ -292,7 +292,6 @@
     }
     .btn-card-reset:hover { background-color: var(--btn-secondary-hover); }
     .btn-card-reset:active { transform: scale(0.985); }
-    .btn-container { margin-top: auto; flex-shrink: 0; }
 
     .zoom-progress-track {
       width: 100%; height: 5px; background: var(--bg-input);
@@ -542,7 +541,9 @@
 
       <div class="control-card">
         <h2>Viaje de zoom</h2>
-        <div class="zoom-progress-track" title="Progreso hacia el núcleo">
+        <div class="zoom-progress-track" id="ui-progress-track" title="Progreso hacia el núcleo"
+             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+             aria-label="Progreso hacia el núcleo">
           <div id="ui-progress-fill" class="zoom-progress-fill"></div>
         </div>
         <div class="zoom-progress-meta">
@@ -553,10 +554,7 @@
           <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto ×10">← Alejar</button>
           <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Acércate un salto ×10 hacia el núcleo">Acercar →</button>
         </div>
-      </div>
-
-      <div class="btn-container">
-        <button id="ui-btn-reset" class="btn-card-reset" title="Vuelve a empezar el viaje desde el núcleo">
+        <button id="ui-btn-reset" class="btn-card-reset" style="margin-top:10px" title="Vuelve a empezar el viaje desde el núcleo">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
           <span>Reiniciar viaje</span>
         </button>

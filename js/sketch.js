@@ -95,6 +95,7 @@ let zoomAnimDir = 0;  // +1 = alejando, -1 = acercando, 0 = en reposo
 const ZOOM_DURATION = 0.75; // segundos por paso de zoom
 
 const uiCache = { theme: "dark" };
+let _electronBoxH = 148; // altura real del recuadro de electrones, se actualiza cada frame
 let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría, recalculada en resize
 
 // =====================================================================
@@ -234,10 +235,11 @@ function nucleusInfoBoxRect() {
   return { x: 14, y: 20, w: w, h: 70 };
 }
 // Rectángulo del recuadro de electrones (arriba-derecha).
-// h=200 es conservador para garantizar clearance aunque el mensaje haga muchos saltos de línea.
+// La altura se actualiza cada frame desde drawElectronInfoBox() para que atomLayout()
+// use la medida real y no una sobreestimación que reduzca innecesariamente atomR.
 function electronInfoBoxRect() {
   const w = Math.min(155, Math.max(120, width * 0.18));
-  return { x: width - w - 14, y: 20, w: w, h: 200 };
+  return { x: width - w - 14, y: 20, w: w, h: _electronBoxH };
 }
 
 // Distancia de un punto al rectángulo r (0 si el punto está dentro).
@@ -293,6 +295,9 @@ function draw() {
     drawNucleusInfoBox(theme, cx, cy);
   }
   drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI);
+  if (zoomAnimDir === 0 && clickIndex === -maxClickIndex(el)) {
+    drawNucleusReachedBox(theme, el);
+  }
 }
 
 // =====================================================================
@@ -652,6 +657,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
     else { curW += ww; }
   }
   const boxH = numLines * 15 + pad + 16;
+  _electronBoxH = boxH; // sincroniza electronInfoBoxRect() con la altura real
   const y = 20;
 
   // Punto objetivo: punto en el anillo exterior en dirección hacia el centro de la caja.
@@ -798,6 +804,47 @@ function updateNucleonAnim(dt) {
   }
 }
 
+// Recuadro informativo que aparece en el canvas cuando el usuario llega al núcleo.
+// Ocupa la esquina superior izquierda, igual que drawNucleusInfoBox, pero en lugar
+// de advertir de que el núcleo no se ve, confirma el logro y da el factor de escala.
+function drawNucleusReachedBox(theme, el) {
+  const card = cardColors(theme);
+  const green = theme === "high-contrast" ? [0, 255, 136] : [16, 185, 129];
+  const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
+  const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande.";
+  const boxW = Math.min(240, Math.max(180, width * 0.28));
+  const pad = 12;
+  const x = 14, y = 20;
+  push();
+  textSize(11.5);
+  textLeading(16);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 16 + pad + 16;
+  rectMode(CORNER);
+  stroke(card.border[0], card.border[1], card.border[2]);
+  strokeWeight(1);
+  fill(card.bg[0], card.bg[1], card.bg[2]);
+  rect(x, y, boxW, boxH, 9);
+  noStroke();
+  fill(green[0], green[1], green[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(16);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
+  pop();
+}
+
 // Texto de apoyo con ajuste de línea (reutilizable en pasos posteriores).
 function drawCaption(theme, x, y, str, col, align, maxWidth) {
   const w = maxWidth || 160;
@@ -849,12 +896,14 @@ function renderJourneyProgress() {
     fill.style.width = pct + "%";
     fill.classList.toggle("is-complete", total > 0 && clickIndex === -total);
   }
+  const track = document.getElementById("ui-progress-track");
+  if (track) track.setAttribute("aria-valuenow", pct);
 
   const atNucleus = total > 0 && clickIndex === -total;
   const label = atNucleus ? "¡Núcleo alcanzado! ×" + Math.pow(10, total).toLocaleString('es-ES')
     : clickIndex === 0 ? "Escala natural"
     : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
-    : "Tamaño original × " + Math.pow(10, -clickIndex).toLocaleString('es-ES');
+    : "Tamaño original ×" + Math.pow(10, -clickIndex).toLocaleString('es-ES');
   if (text) text.innerText = label;
   if (steps) steps.textContent = clickIndex !== 0 ? Math.abs(clickIndex) + " / " + total : "";
 
