@@ -289,6 +289,7 @@
       border-radius: 9px; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center; gap: 8px;
       transition: background-color 0.15s ease, transform 0.08s ease;
+      margin-top: 10px;
     }
     .btn-card-reset:hover { background-color: var(--btn-secondary-hover); }
     .btn-card-reset:active { transform: scale(0.985); }
@@ -401,7 +402,12 @@
        mientras se recorre una barra larguísima. */
     .ladder-section {
       grid-row: 2 / 3; grid-column: 1 / 3;
-      background-color: var(--bg-card); border: 1px solid var(--border-main);
+      /* Scroll shadow: fade derecha visible cuando hay contenido oculto a la derecha */
+      background:
+        linear-gradient(to left, var(--bg-card), transparent)    right / 40px 100% local  no-repeat,
+        linear-gradient(to left, rgba(0,0,0,.16), transparent)   right / 40px 100% scroll no-repeat,
+        var(--bg-card);
+      border: 1px solid var(--border-main);
       border-radius: var(--radius); padding: 10px var(--card-pad);
       max-height: 190px; overflow: auto;
       display: flex; flex-direction: column; gap: 6px;
@@ -505,11 +511,11 @@
       </header>
 
       <div class="collapsible-card is-expanded" id="ui-panel-info">
-        <button class="collapsible-trigger" id="ui-info-trigger">
+        <button class="collapsible-trigger" id="ui-info-trigger" aria-expanded="true" aria-controls="ui-info-content">
           <span class="collapsible-trigger-title">Guía rápida</span>
           <span class="collapsible-arrow">▼</span>
         </button>
-        <div class="collapsible-content">
+        <div class="collapsible-content" id="ui-info-content">
           <div class="info-block">
             <div class="info-label">Lo que ves</div>
             <p class="info-text">El <strong>átomo completo</strong> a escala natural, con sus capas de electrones. La cota bajo el dibujo marca su <strong>diámetro real</strong>. El núcleo está en el centro, pero es tan pequeño que aquí no se puede dibujar.</p>
@@ -554,8 +560,8 @@
           <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto ×10">← Alejar</button>
           <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Acércate un salto ×10 hacia el núcleo">Acercar →</button>
         </div>
-        <button id="ui-btn-reset" class="btn-card-reset" style="margin-top:10px" title="Vuelve a empezar el viaje desde el núcleo">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        <button id="ui-btn-reset" class="btn-card-reset" title="Vuelve a empezar el viaje desde el núcleo">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
           <span>Reiniciar viaje</span>
         </button>
       </div>
@@ -564,7 +570,7 @@
     <div class="canvas-area">
       <div class="theme-dropdown-container" id="ui-dropdown-container">
         <button class="dropdown-gear-btn" id="ui-dropdown-trigger" title="Apariencia" aria-label="Apariencia">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <div class="dropdown-card">
           <h3>Visualización</h3>

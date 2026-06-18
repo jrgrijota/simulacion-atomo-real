@@ -639,7 +639,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
 
   const card = cardColors(theme);
   const acc  = accentColor(theme);
-  const msg  = "Los electrones son más pequeños que el núcleo, pero los representamos como una bolita para que quede claro que estamos trabajando con átomos.";
+  const msg  = "Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.";
   const boxW = Math.min(155, Math.max(120, width * 0.18));
   const pad  = 12;
   const x    = width - boxW - 14;
@@ -1000,7 +1000,6 @@ function renderLadder() {
   }
 
   section.innerHTML = rows.join('');
-  section.scrollLeft = 0;
 }
 
 function refreshAll() {
@@ -1018,6 +1017,8 @@ function resetJourney() {
   zoomAnimT = 0;
   zoomAnimDir = 0;
   ladderScalePx = BASE_PX;
+  const ladderEl = document.getElementById("ladder-section");
+  if (ladderEl) ladderEl.scrollLeft = 0;
   refreshAll();
 }
 
@@ -1066,8 +1067,10 @@ function setupUIEventListeners() {
   }
 
   const infoCard = document.getElementById("ui-panel-info");
-  document.getElementById("ui-info-trigger").addEventListener("click", () => {
+  const infoTrigger = document.getElementById("ui-info-trigger");
+  infoTrigger.addEventListener("click", () => {
     infoCard.classList.toggle("is-expanded");
+    infoTrigger.setAttribute("aria-expanded", String(infoCard.classList.contains("is-expanded")));
   });
 
   document.addEventListener("keydown", (e) => {
