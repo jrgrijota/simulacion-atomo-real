@@ -92,13 +92,14 @@
     }
 
     [data-theme="light"] {
-      --bg-body: #c8d0da;
-      --bg-container: #d8dfe8;
-      --bg-card: #cdd4de;
-      --bg-card-hover: #c2cad5;
-      --bg-input: #dce2ea;
-      --border-main: #8fa0b2;
-      --border-strong: #5f7488;
+      /* Jerarquía de elevación idéntica al tema oscuro: body < container < card */
+      --bg-body: #b8c4d0;
+      --bg-container: #c8d4e0;
+      --bg-card: #dde7f2;
+      --bg-card-hover: #e5eef8;
+      --bg-input: #cdd7e4;
+      --border-main: #94a8bc;
+      --border-strong: #6a8299;
       --border-canvas: #3a5068;
       --text-main: #0c1a28;
       --text-muted: #2c4258;
@@ -108,10 +109,10 @@
       --accent-soft: rgba(26, 82, 190, 0.16);
       --success: #0a7a50;
       --success-hover: #086040;
-      --btn-secondary: #bac3cf;
-      --btn-secondary-hover: #adb7c4;
-      --shadow-card: 0 1px 3px rgba(12,26,40,0.16);
-      --shadow-pop: 0 12px 28px -6px rgba(12,26,40,0.34);
+      --btn-secondary: #c0ccda;
+      --btn-secondary-hover: #b0bcc8;
+      --shadow-card: 0 2px 6px rgba(12,26,40,0.14);
+      --shadow-pop: 0 12px 28px -6px rgba(12,26,40,0.26);
     }
 
     [data-theme="high-contrast"] {
@@ -288,28 +289,55 @@
       border-radius: 9px; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center; gap: 8px;
       transition: background-color 0.15s ease, transform 0.08s ease;
+      margin-top: 10px;
     }
     .btn-card-reset:hover { background-color: var(--btn-secondary-hover); }
     .btn-card-reset:active { transform: scale(0.985); }
-    .btn-container { margin-top: auto; flex-shrink: 0; }
 
-    .zoom-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .zoom-progress-track {
+      width: 100%; height: 5px; background: var(--bg-input);
+      border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+    }
+    .zoom-progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--success) 100%);
+      border-radius: 3px; transition: width 0.4s ease;
+    }
+    .zoom-progress-fill.is-complete {
+      background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+      animation: progress-complete 2s ease-in-out infinite;
+    }
+    @keyframes progress-complete {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+    .zoom-progress-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .zoom-status-label { font-size: var(--fs-hint); color: var(--text-muted); font-weight: 600; }
+    .zoom-steps-badge {
+      font-size: var(--fs-hint); color: var(--text-muted);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    .zoom-btn-row { display: grid; grid-template-columns: 2fr 3fr; gap: 8px; margin-bottom: 0; }
     .btn-zoom-out, .btn-zoom-in {
       width: 100%; padding: calc(var(--ctrl-pad-y) + 4px) 8px; font-size: var(--fs-btn); font-weight: 800;
       border-radius: 10px; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center; gap: 6px;
       transition: filter 0.15s ease, background-color 0.15s ease, transform 0.08s ease;
     }
-    .btn-zoom-out {
+    .btn-zoom-in {
       color: #fff;
       background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
       box-shadow: 0 4px 12px -2px var(--accent-soft);
     }
-    .btn-zoom-out:hover { filter: brightness(1.08); }
-    .btn-zoom-in {
+    .btn-zoom-in:hover { filter: brightness(1.08); }
+    .btn-zoom-out {
       color: var(--text-main); background-color: var(--btn-secondary);
     }
-    .btn-zoom-in:hover { background-color: var(--btn-secondary-hover); }
+    .btn-zoom-out:hover { background-color: var(--btn-secondary-hover); }
     .btn-zoom-out:active, .btn-zoom-in:active { transform: scale(0.985); }
     .btn-zoom-out:disabled, .btn-zoom-in:disabled {
       background: var(--btn-secondary); color: var(--text-muted); cursor: default;
@@ -374,7 +402,12 @@
        mientras se recorre una barra larguísima. */
     .ladder-section {
       grid-row: 2 / 3; grid-column: 1 / 3;
-      background-color: var(--bg-card); border: 1px solid var(--border-main);
+      /* Scroll shadow: fade derecha visible cuando hay contenido oculto a la derecha */
+      background:
+        linear-gradient(to left, var(--bg-card), transparent)    right / 40px 100% local  no-repeat,
+        linear-gradient(to left, rgba(0,0,0,.16), transparent)   right / 40px 100% scroll no-repeat,
+        var(--bg-card);
+      border: 1px solid var(--border-main);
       border-radius: var(--radius); padding: 10px var(--card-pad);
       max-height: 190px; overflow: auto;
       display: flex; flex-direction: column; gap: 6px;
@@ -477,19 +510,27 @@
         </div>
       </header>
 
-      <div class="collapsible-card" id="ui-panel-info">
-        <button class="collapsible-trigger" id="ui-info-trigger">
+      <div class="collapsible-card is-expanded" id="ui-panel-info">
+        <button class="collapsible-trigger" id="ui-info-trigger" aria-expanded="true" aria-controls="ui-info-content">
           <span class="collapsible-trigger-title">Guía rápida</span>
           <span class="collapsible-arrow">▼</span>
         </button>
-        <div class="collapsible-content">
+        <div class="collapsible-content" id="ui-info-content">
           <div class="info-block">
             <div class="info-label">Lo que ves</div>
-            <p class="info-text">El <strong>átomo completo</strong> con todas sus capas de electrones. Bajo el dibujo, una cota marca su <strong>diámetro real</strong>. El <strong>núcleo</strong> está en el centro, pero a esta escala es demasiado pequeño para dibujarlo: por eso no aparece.</p>
+            <p class="info-text">El <strong>átomo completo</strong> a escala natural, con sus capas de electrones. La cota bajo el dibujo marca su <strong>diámetro real</strong>. El núcleo está en el centro, pero es tan pequeño que aquí no se puede dibujar.</p>
+          </div>
+          <div class="info-block">
+            <div class="info-label">El viaje de zoom</div>
+            <p class="info-text">Cada pulsación de <strong>Acercar</strong> amplía la imagen <strong>×10</strong>. En 5 saltos pasas de ver el átomo entero a ver el núcleo. La diferencia entre ambos es un factor de <strong>100.000</strong>.</p>
           </div>
           <div class="info-block">
             <div class="info-label">La franja inferior</div>
-            <p class="info-text">Muestra, como referencia, una línea del tamaño del <strong>diámetro del núcleo</strong>. Compárala con el diámetro del átomo de arriba para hacerte una idea de la diferencia.</p>
+            <p class="info-text">Cada barra de color es un tamaño <strong>a escala real</strong>. Compara su longitud con el diámetro del átomo para hacerte una idea de cuánto más pequeño es el núcleo.</p>
+          </div>
+          <div class="info-block">
+            <div class="info-label">Teclado</div>
+            <p class="info-text">Usa <strong>→</strong> y <strong>←</strong> para acercar y alejar. Pulsa <strong>R</strong> para reiniciar el viaje.</p>
           </div>
         </div>
       </div>
@@ -498,7 +539,7 @@
         <h2>Elemento</h2>
         <div class="control-group">
           <div class="select-wrapper">
-            <select id="ui-element-select"></select>
+            <select id="ui-element-select" aria-label="Seleccionar elemento"></select>
           </div>
         </div>
         <div id="element-facts"></div>
@@ -506,16 +547,21 @@
 
       <div class="control-card">
         <h2>Viaje de zoom</h2>
-        <div class="zoom-btn-row">
-          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Vuelve un salto atrás, hacia el núcleo">➕ Acercar</button>
-          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto más">➖ Alejar</button>
+        <div class="zoom-progress-track" id="ui-progress-track" title="Progreso hacia el núcleo"
+             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+             aria-label="Progreso hacia el núcleo">
+          <div id="ui-progress-fill" class="zoom-progress-fill"></div>
         </div>
-        <p class="field-hint" id="ui-progress-text">Salto 0 de 0</p>
-      </div>
-
-      <div class="btn-container">
+        <div class="zoom-progress-meta">
+          <span id="ui-progress-text" class="zoom-status-label">Escala natural</span>
+          <span id="ui-progress-steps" class="zoom-steps-badge"></span>
+        </div>
+        <div class="zoom-btn-row">
+          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto ×10">← Alejar</button>
+          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Acércate un salto ×10 hacia el núcleo">Acercar →</button>
+        </div>
         <button id="ui-btn-reset" class="btn-card-reset" title="Vuelve a empezar el viaje desde el núcleo">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
           <span>Reiniciar viaje</span>
         </button>
       </div>
@@ -524,7 +570,7 @@
     <div class="canvas-area">
       <div class="theme-dropdown-container" id="ui-dropdown-container">
         <button class="dropdown-gear-btn" id="ui-dropdown-trigger" title="Apariencia" aria-label="Apariencia">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
         <div class="dropdown-card">
           <h3>Visualización</h3>
@@ -560,11 +606,11 @@
           </div>
         </div>
       </div>
-      <div id="canvas-holder"></div>
+      <div id="canvas-holder" aria-hidden="true"></div>
     </div>
 
     <div class="ladder-section" id="ladder-section">
-      <p class="ladder-empty">Comparación a escala real — pulsa "Alejar" para ir añadiendo líneas.</p>
+      <p class="ladder-empty">Comparación a escala real — pulsa «Acercar» para ir añadiendo líneas de referencia.</p>
     </div>
   </div>
 

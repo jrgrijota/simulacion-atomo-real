@@ -84,10 +84,8 @@ ELEMENTS.forEach((el) => { ELEMENT_DATA[el.id] = computeElement(el); });
 // ---------------------------------------------------------------------
 let currentElementId = "H";
 let clickIndex = 0; // nº de saltos de zoom-out realizados
-let nucleonLayoutCache = null;
 let nucleonAnim = null; // { elementId, particles: [{x,y,vx,vy,type}] } coords normalizadas (1 = nucleusR)
 let electronAngles = [];
-let ladderScalePx = BASE_PX;
 
 // Animación de zoom continua
 let zoomAnimT = 0;    // progreso lineal 0→1 del paso actual
@@ -95,6 +93,7 @@ let zoomAnimDir = 0;  // +1 = alejando, -1 = acercando, 0 = en reposo
 const ZOOM_DURATION = 0.75; // segundos por paso de zoom
 
 const uiCache = { theme: "dark" };
+let _electronBoxH = 148; // altura real del recuadro de electrones, se actualiza cada frame
 let diagramCx = 0, diagramCy = 0, diagramMaxRadiusPx = 0; // geometría, recalculada en resize
 
 // =====================================================================
@@ -176,7 +175,7 @@ function accentColor(theme) {
   return theme === "light" ? [26, 82, 190] : theme === "high-contrast" ? [255, 255, 0] : [96, 165, 250];
 }
 function cardColors(theme) {
-  if (theme === "light") return { bg: [205, 212, 222], border: [143, 160, 178], ink: [12, 26, 40] };
+  if (theme === "light") return { bg: [221, 231, 242], border: [148, 168, 188], ink: [12, 26, 40] };
   if (theme === "high-contrast") return { bg: [24, 24, 24], border: [255, 255, 255], ink: [255, 255, 255] };
   return { bg: [30, 35, 52], border: [43, 49, 71], ink: [238, 242, 248] };
 }
@@ -207,6 +206,7 @@ function setup() {
   const h = holder && holder.offsetHeight ? holder.offsetHeight : 600;
   const canvas = createCanvas(w, h);
   canvas.parent("canvas-holder");
+  textFont('system-ui, -apple-system, "Segoe UI", sans-serif');
   recomputeLayout();
   populateElementSelect();
   setupAppearanceEventListeners();
@@ -234,10 +234,11 @@ function nucleusInfoBoxRect() {
   return { x: 14, y: 20, w: w, h: 70 };
 }
 // Rectángulo del recuadro de electrones (arriba-derecha).
-// h=200 es conservador para garantizar clearance aunque el mensaje haga muchos saltos de línea.
+// La altura se actualiza cada frame desde drawElectronInfoBox() para que atomLayout()
+// use la medida real y no una sobreestimación que reduzca innecesariamente atomR.
 function electronInfoBoxRect() {
   const w = Math.min(155, Math.max(120, width * 0.18));
-  return { x: width - w - 14, y: 20, w: w, h: 200 };
+  return { x: width - w - 14, y: 20, w: w, h: _electronBoxH };
 }
 
 // Distancia de un punto al rectángulo r (0 si el punto está dentro).
@@ -293,6 +294,9 @@ function draw() {
     drawNucleusInfoBox(theme, cx, cy);
   }
   drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI);
+  if (zoomAnimDir === 0 && clickIndex === -maxClickIndex(el)) {
+    drawNucleusReachedBox(theme, el);
+  }
 }
 
 // =====================================================================
@@ -469,7 +473,7 @@ function drawCotaLine(cx, y, halfPx, col, diamLabel, nameLabel, ink, noLabel) {
   const x1 = cx - halfPx, x2 = cx + halfPx;
   push();
   stroke(col[0], col[1], col[2]);
-  strokeWeight(6);
+  strokeWeight(2.5);
   line(x1, y, x2, y);
   if (halfPx > 8) {
     line(x1, y - 8, x1, y + 8);
@@ -578,6 +582,7 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   // Dirección hacia el núcleo.
   const dx = nucCx - anchorX, dy = nucCy - anchorY;
   const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist === 0) { pop(); return; }
   const ux = dx / dist, uy = dy / dist;
 
   // Cabeza de flecha: triángulo pequeño con punta a 4 px del centro.
@@ -633,7 +638,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
 
   const card = cardColors(theme);
   const acc  = accentColor(theme);
-  const msg  = "Los electrones son más pequeños que el núcleo, pero los representamos como una bolita para que quede claro que estamos trabajando con átomos.";
+  const msg  = "Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.";
   const boxW = Math.min(155, Math.max(120, width * 0.18));
   const pad  = 12;
   const x    = width - boxW - 14;
@@ -651,6 +656,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
     else { curW += ww; }
   }
   const boxH = numLines * 15 + pad + 16;
+  _electronBoxH = boxH; // sincroniza electronInfoBoxRect() con la altura real
   const y = 20;
 
   // Punto objetivo: punto en el anillo exterior en dirección hacia el centro de la caja.
@@ -739,13 +745,6 @@ function buildNucleonLayout(el) {
   });
 }
 
-function getNucleonLayout(el) {
-  if (!nucleonLayoutCache || nucleonLayoutCache.id !== el.id) {
-    nucleonLayoutCache = { id: el.id, points: buildNucleonLayout(el) };
-  }
-  return nucleonLayoutCache.points;
-}
-
 function initNucleonAnim(el) {
   const points = buildNucleonLayout(el);
   nucleonAnim = {
@@ -797,17 +796,44 @@ function updateNucleonAnim(dt) {
   }
 }
 
-// Texto de apoyo con ajuste de línea (reutilizable en pasos posteriores).
-function drawCaption(theme, x, y, str, col, align, maxWidth) {
-  const w = maxWidth || 160;
-  let boxX = align === LEFT ? x : x - w / 2;
-  boxX = constrain(boxX, 2, Math.max(2, width - w - 2));
+// Recuadro informativo que aparece en el canvas cuando el usuario llega al núcleo.
+// Ocupa la esquina superior izquierda, igual que drawNucleusInfoBox, pero en lugar
+// de advertir de que el núcleo no se ve, confirma el logro y da el factor de escala.
+function drawNucleusReachedBox(theme, el) {
+  const card = cardColors(theme);
+  const green = theme === "high-contrast" ? [0, 255, 136] : [16, 185, 129];
+  const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
+  const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande.";
+  const boxW = Math.min(240, Math.max(180, width * 0.28));
+  const pad = 12;
+  const x = 14, y = 20;
   push();
-  textAlign(align === LEFT ? LEFT : CENTER, TOP);
-  textSize(10.5);
+  textSize(11.5);
+  textLeading(16);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 16 + pad + 16;
+  rectMode(CORNER);
+  stroke(card.border[0], card.border[1], card.border[2]);
+  strokeWeight(1);
+  fill(card.bg[0], card.bg[1], card.bg[2]);
+  rect(x, y, boxW, boxH, 9);
+  noStroke();
+  fill(green[0], green[1], green[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(16);
   textWrap(WORD);
-  fill(col[0], col[1], col[2]);
-  text(str, boxX, y, w);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
   pop();
 }
 
@@ -841,13 +867,23 @@ function renderJourneyProgress() {
   const total = maxClickIndex(el);
   const fill = document.getElementById("ui-progress-fill");
   const text = document.getElementById("ui-progress-text");
-  const pct = total === 0 ? 50 : 50 + Math.round((clickIndex / total) * 50);
-  if (fill) fill.style.width = pct + "%";
+  const steps = document.getElementById("ui-progress-steps");
 
-  const label = clickIndex === 0 ? "Escala natural"
+  const pct = total === 0 ? 0 : Math.max(0, Math.round((-clickIndex / total) * 100));
+  if (fill) {
+    fill.style.width = pct + "%";
+    fill.classList.toggle("is-complete", total > 0 && clickIndex === -total);
+  }
+  const track = document.getElementById("ui-progress-track");
+  if (track) track.setAttribute("aria-valuenow", pct);
+
+  const atNucleus = total > 0 && clickIndex === -total;
+  const label = atNucleus ? "¡Núcleo alcanzado! ×" + Math.pow(10, total).toLocaleString('es-ES')
+    : clickIndex === 0 ? "Escala natural"
     : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
-    : "Tamaño original × " + Math.pow(10, -clickIndex).toLocaleString('es-ES');
+    : "Tamaño original ×" + Math.pow(10, -clickIndex).toLocaleString('es-ES');
   if (text) text.innerText = label;
+  if (steps) steps.textContent = clickIndex !== 0 ? Math.abs(clickIndex) + " / " + total : "";
 
   const animating = zoomAnimDir !== 0;
   const btnOut = document.getElementById("ui-btn-zoom-out");
@@ -928,7 +964,7 @@ function renderLadder() {
       // physDiam coincide con lo que representa la flecha del canvas cuando clickIndex = -j
       physDiam = el.atomDiameterM * Math.pow(10, -j);
       col = zoomArrowColor(-j); // idéntico al color de la flecha en ese paso de zoom
-      name = j === 0 ? "Átomo de " + el.name : "Ref. ÷10" + toSuperscript(j);
+      name = j === 0 ? "Átomo de " + el.name : "1/" + Math.pow(10, j).toLocaleString('es-ES') + " del átomo";
     }
     // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
     const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
@@ -942,7 +978,6 @@ function renderLadder() {
   }
 
   section.innerHTML = rows.join('');
-  section.scrollLeft = 0;
 }
 
 function refreshAll() {
@@ -959,7 +994,8 @@ function resetJourney() {
   clickIndex = 0;
   zoomAnimT = 0;
   zoomAnimDir = 0;
-  ladderScalePx = BASE_PX;
+  const ladderEl = document.getElementById("ladder-section");
+  if (ladderEl) ladderEl.scrollLeft = 0;
   refreshAll();
 }
 
@@ -1008,8 +1044,21 @@ function setupUIEventListeners() {
   }
 
   const infoCard = document.getElementById("ui-panel-info");
-  document.getElementById("ui-info-trigger").addEventListener("click", () => {
+  const infoTrigger = document.getElementById("ui-info-trigger");
+  infoTrigger.addEventListener("click", () => {
     infoCard.classList.toggle("is-expanded");
+    infoTrigger.setAttribute("aria-expanded", String(infoCard.classList.contains("is-expanded")));
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") {
+      document.getElementById("ui-btn-zoom-in").click();
+    } else if (e.key === "ArrowLeft") {
+      document.getElementById("ui-btn-zoom-out").click();
+    } else if (e.key === "r" || e.key === "R") {
+      document.getElementById("ui-btn-reset").click();
+    }
   });
 }
 
