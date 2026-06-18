@@ -469,7 +469,7 @@ function drawCotaLine(cx, y, halfPx, col, diamLabel, nameLabel, ink, noLabel) {
   const x1 = cx - halfPx, x2 = cx + halfPx;
   push();
   stroke(col[0], col[1], col[2]);
-  strokeWeight(6);
+  strokeWeight(2.5);
   line(x1, y, x2, y);
   if (halfPx > 8) {
     line(x1, y - 8, x1, y + 8);
@@ -578,6 +578,7 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   // Dirección hacia el núcleo.
   const dx = nucCx - anchorX, dy = nucCy - anchorY;
   const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist === 0) { pop(); return; }
   const ux = dx / dist, uy = dy / dist;
 
   // Cabeza de flecha: triángulo pequeño con punta a 4 px del centro.
@@ -841,13 +842,16 @@ function renderJourneyProgress() {
   const total = maxClickIndex(el);
   const fill = document.getElementById("ui-progress-fill");
   const text = document.getElementById("ui-progress-text");
-  const pct = total === 0 ? 50 : 50 + Math.round((clickIndex / total) * 50);
+  const steps = document.getElementById("ui-progress-steps");
+
+  const pct = total === 0 ? 0 : Math.max(0, Math.round((-clickIndex / total) * 100));
   if (fill) fill.style.width = pct + "%";
 
   const label = clickIndex === 0 ? "Escala natural"
     : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
     : "Tamaño original × " + Math.pow(10, -clickIndex).toLocaleString('es-ES');
   if (text) text.innerText = label;
+  if (steps) steps.textContent = clickIndex !== 0 ? Math.abs(clickIndex) + " / " + total : "";
 
   const animating = zoomAnimDir !== 0;
   const btnOut = document.getElementById("ui-btn-zoom-out");

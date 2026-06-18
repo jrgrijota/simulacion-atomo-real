@@ -293,23 +293,42 @@
     .btn-card-reset:active { transform: scale(0.985); }
     .btn-container { margin-top: auto; flex-shrink: 0; }
 
-    .zoom-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .zoom-progress-track {
+      width: 100%; height: 5px; background: var(--bg-input);
+      border-radius: 3px; overflow: hidden; margin-bottom: 8px;
+    }
+    .zoom-progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--success) 100%);
+      border-radius: 3px; transition: width 0.4s ease;
+    }
+    .zoom-progress-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .zoom-status-label { font-size: var(--fs-hint); color: var(--text-muted); font-weight: 600; }
+    .zoom-steps-badge {
+      font-size: var(--fs-hint); color: var(--text-muted);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    .zoom-btn-row { display: grid; grid-template-columns: 2fr 3fr; gap: 8px; margin-bottom: 0; }
     .btn-zoom-out, .btn-zoom-in {
       width: 100%; padding: calc(var(--ctrl-pad-y) + 4px) 8px; font-size: var(--fs-btn); font-weight: 800;
       border-radius: 10px; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center; gap: 6px;
       transition: filter 0.15s ease, background-color 0.15s ease, transform 0.08s ease;
     }
-    .btn-zoom-out {
+    .btn-zoom-in {
       color: #fff;
       background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
       box-shadow: 0 4px 12px -2px var(--accent-soft);
     }
-    .btn-zoom-out:hover { filter: brightness(1.08); }
-    .btn-zoom-in {
+    .btn-zoom-in:hover { filter: brightness(1.08); }
+    .btn-zoom-out {
       color: var(--text-main); background-color: var(--btn-secondary);
     }
-    .btn-zoom-in:hover { background-color: var(--btn-secondary-hover); }
+    .btn-zoom-out:hover { background-color: var(--btn-secondary-hover); }
     .btn-zoom-out:active, .btn-zoom-in:active { transform: scale(0.985); }
     .btn-zoom-out:disabled, .btn-zoom-in:disabled {
       background: var(--btn-secondary); color: var(--text-muted); cursor: default;
@@ -477,7 +496,7 @@
         </div>
       </header>
 
-      <div class="collapsible-card" id="ui-panel-info">
+      <div class="collapsible-card is-expanded" id="ui-panel-info">
         <button class="collapsible-trigger" id="ui-info-trigger">
           <span class="collapsible-trigger-title">Guía rápida</span>
           <span class="collapsible-arrow">▼</span>
@@ -506,11 +525,17 @@
 
       <div class="control-card">
         <h2>Viaje de zoom</h2>
-        <div class="zoom-btn-row">
-          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Vuelve un salto atrás, hacia el núcleo">➕ Acercar</button>
-          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto más">➖ Alejar</button>
+        <div class="zoom-progress-track" title="Progreso hacia el núcleo">
+          <div id="ui-progress-fill" class="zoom-progress-fill"></div>
         </div>
-        <p class="field-hint" id="ui-progress-text">Salto 0 de 0</p>
+        <div class="zoom-progress-meta">
+          <span id="ui-progress-text" class="zoom-status-label">Escala natural</span>
+          <span id="ui-progress-steps" class="zoom-steps-badge"></span>
+        </div>
+        <div class="zoom-btn-row">
+          <button id="ui-btn-zoom-out" class="btn-zoom-out" title="Aléjate un salto ×10">← Alejar</button>
+          <button id="ui-btn-zoom-in" class="btn-zoom-in" title="Acércate un salto ×10 hacia el núcleo">Acercar →</button>
+        </div>
       </div>
 
       <div class="btn-container">
@@ -564,7 +589,7 @@
     </div>
 
     <div class="ladder-section" id="ladder-section">
-      <p class="ladder-empty">Comparación a escala real — pulsa "Alejar" para ir añadiendo líneas.</p>
+      <p class="ladder-empty">Comparación a escala real — pulsa «Acercar» para ir añadiendo líneas de referencia.</p>
     </div>
   </div>
 
