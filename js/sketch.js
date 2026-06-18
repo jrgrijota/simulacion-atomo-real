@@ -140,6 +140,10 @@ function formatLength(m) {
 }
 
 // Longitud en metros con notación científica (p.ej. "1,06 × 10⁻¹⁰ m").
+function diamLabel(m) {
+  return "D = " + formatLength(m) + " = " + formatScientificM(m);
+}
+
 function formatScientificM(m) {
   if (m === 0) return "0 m";
   const exp = Math.floor(Math.log10(Math.abs(m)));
@@ -224,11 +228,16 @@ function recomputeLayout() {
   diagramMaxRadiusPx = Math.max(20, Math.min(width, height) / 2 - 28);
 }
 
-// Rectángulo (px) del recuadro informativo del núcleo, en la esquina superior
-// derecha. Centralizado para que la geometría del átomo pueda esquivarlo.
+// Rectángulo del recuadro del núcleo (arriba-izquierda).
 function nucleusInfoBoxRect() {
   const w = Math.min(252, Math.max(176, width * 0.36));
-  return { x: width - w - 14, y: 72, w: w, h: 70 };
+  return { x: 14, y: 20, w: w, h: 70 };
+}
+// Rectángulo del recuadro de electrones (arriba-derecha).
+// h=200 es conservador para garantizar clearance aunque el mensaje haga muchos saltos de línea.
+function electronInfoBoxRect() {
+  const w = Math.min(155, Math.max(120, width * 0.18));
+  return { x: width - w - 14, y: 20, w: w, h: 200 };
 }
 
 // Distancia de un punto al rectángulo r (0 si el punto está dentro).
@@ -248,7 +257,10 @@ function atomLayout() {
   const areaBottom = height - 84; // espacio inferior para la cota y la leyenda
   const cy = (areaTop + areaBottom) / 2;
   let atomR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2)) * 0.94;
-  const clearance = pointRectDist(cx, cy, nucleusInfoBoxRect()) - 10;
+  const clearance = Math.min(
+    pointRectDist(cx, cy, nucleusInfoBoxRect()),
+    pointRectDist(cx, cy, electronInfoBoxRect())
+  ) - 10;
   atomR = Math.max(24, Math.min(atomR, clearance));
   return { cx, cy, atomR };
 }
@@ -280,6 +292,7 @@ function draw() {
   if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
     drawNucleusInfoBox(theme, cx, cy);
   }
+  drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI);
 }
 
 // =====================================================================
@@ -294,6 +307,20 @@ function drawAtomView(theme, el, effectiveCI) {
   const zoomFactor = Math.pow(10, effectiveCI);
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
+
+  // Relleno suave del interior del átomo (capa más externa visible).
+  // Cuando todas las capas superan el lienzo (zoom muy alto), el interior
+  // del átomo cubre toda la pantalla → se rellena el canvas completo.
+  push();
+  noStroke();
+  fill(acc[0], acc[1], acc[2], 22);
+  let atomFilled = false;
+  for (let s = numShells - 1; s >= 0; s--) {
+    const rs = atomR * (s + 1) / numShells / zoomFactor;
+    if (rs > 0 && rs <= Math.max(width, height)) { circle(cx, cy, rs * 2); atomFilled = true; break; }
+  }
+  if (!atomFilled) rect(0, 0, width, height);
+  pop();
 
   push();
   for (let s = 0; s < numShells; s++) {
@@ -373,61 +400,66 @@ function drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI) {
   pop();
 }
 
-// Cota (línea de medida) bajo el dibujo. Durante la animación muestra dos flechas:
-// la referencia actual (que crece/mengua hasta salir del área) y la siguiente (que
-// llega hasta ocupar el tamaño final). Fuera de animación: una sola flecha.
+// Cota (línea de medida) bajo el dibujo. Muestra el diámetro del núcleo en cuanto
+// éste es visible (nucleusR >= 0.5 px); antes, muestra la fracción del átomo a escala.
+// Durante la animación: flecha saliente (referencia actual) + flecha entrante (siguiente).
 function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
   const ink = inkText(theme);
-  const nucleusR = (el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI);
-  const nucleusVisible = nucleusR >= 0.5;
   const animating = zoomAnimDir !== 0;
   const y = cy + atomR + 24;
+  const ARROW_HEAD = 14;
 
-  const ARROW_HEAD = 14; // profundidad de la cabeza de flecha en px
-  if (nucleusVisible) {
-    // Núcleo visible: si el diámetro en px < 4× cabeza de flecha, usar cota con
-    // triángulos hacia adentro; si no, flecha normal.
+  const ratio = el.nucleusDiameterM / el.atomDiameterM;
+
+  function nucleusRAtCI(ci) {
+    return ratio * atomR / Math.pow(10, ci);
+  }
+
+  function drawNucleusRef(nucR) {
     const col = stepColor(0);
-    const diam = "Ø " + formatLength(el.nucleusDiameterM);
+    const diam = diamLabel(el.nucleusDiameterM);
     const nom  = "Núcleo de " + el.name;
-    if (nucleusR < 2 * ARROW_HEAD) {
-      drawCotaDimension(cx, y, nucleusR, col, diam, nom, ink);
+    if (nucR < 2 * ARROW_HEAD) drawCotaDimension(cx, y, nucR, col, diam, nom, ink);
+    else                        drawCotaLine(cx, y, nucR, col, diam, nom, ink, false);
+  }
+
+  if (!animating) {
+    const nucR = nucleusRAtCI(clickIndex);
+    if (nucR >= 0.5) {
+      drawNucleusRef(nucR);
     } else {
-      drawCotaLine(cx, y, nucleusR, col, diam, nom, ink, false);
+      const col = zoomArrowColor(clickIndex);
+      const physDiam = el.atomDiameterM * Math.pow(10, clickIndex);
+      const lbl = clickIndex === 0 ? "Átomo de " + el.name : null;
+      drawCotaLine(cx, y, atomR, col, diamLabel(physDiam), lbl, ink, false);
     }
-
-  } else if (!animating) {
-    // Estado estático: una sola flecha
-    const col = zoomArrowColor(clickIndex);
-    const physDiam = el.atomDiameterM * Math.pow(10, clickIndex);
-    const lbl = clickIndex === 0 ? "Átomo de " + el.name
-      : clickIndex > 0 ? "Ref. ×10" + toSuperscript(clickIndex)
-      : "Ref. ÷10" + toSuperscript(-clickIndex);
-    drawCotaLine(cx, y, atomR, col, "Ø " + formatLength(physDiam), lbl, ink, false);
-
   } else {
-    // Animación: dos flechas.
-    // La "grande" es la referencia que había antes del zoom; crece (acercar) o mengua (alejar).
-    // La "pequeña" es la próxima referencia; llega hasta atomR al finalizar el paso.
-    // Ambas se derivan de effectiveCI sin necesidad de recalcular easeT.
-
-    const halfBig = atomR * Math.pow(10, -(effectiveCI - clickIndex));
-    const nextCI  = clickIndex + zoomAnimDir;
+    const halfBig   = atomR * Math.pow(10, -(effectiveCI - clickIndex));
+    const nextCI    = clickIndex + zoomAnimDir;
     const halfSmall = atomR * Math.pow(10, nextCI - effectiveCI);
+    const nucR_anim = ratio * atomR / Math.pow(10, effectiveCI);
+    const areaHalf  = (width - 40) / 2;
 
-    // Dibujar la flecha grande solo mientras quepa en el área (o casi)
-    const areaHalf = (width - 40) / 2;
-    if (halfBig <= areaHalf * 1.05 && halfBig > 2) {
-      drawCotaLine(cx, y, halfBig, zoomArrowColor(clickIndex), null, null, ink, true);
+    const nucRCurrent = nucleusRAtCI(clickIndex);
+    const nucRNext    = nucleusRAtCI(nextCI);
+
+    if (nucRCurrent >= 0.5) {
+      // Paso actual ya muestra el núcleo: una sola cota del núcleo que crece/mengua.
+      if (nucR_anim >= 0.5) drawNucleusRef(nucR_anim);
+    } else {
+      // Flecha saliente: fracción del átomo en el paso actual.
+      if (halfBig <= areaHalf * 1.05 && halfBig > 2) {
+        drawCotaLine(cx, y, halfBig, zoomArrowColor(clickIndex), null, null, ink, true);
+      }
+      // Flecha entrante: núcleo si ya es visible en el siguiente paso, si no fracción del átomo.
+      if (nucRNext >= 0.5) {
+        drawNucleusRef(nucR_anim);
+      } else {
+        const physDiam2 = el.atomDiameterM * Math.pow(10, nextCI);
+        const name2 = nextCI === 0 ? "Átomo de " + el.name : null;
+        drawCotaLine(cx, y, halfSmall, zoomArrowColor(nextCI), diamLabel(physDiam2), name2, ink, false);
+      }
     }
-
-    // Dibujar la flecha pequeña (nueva referencia) siempre con etiqueta
-    const physDiam2 = el.atomDiameterM * Math.pow(10, nextCI);
-    const name2 = nextCI === 0 ? "Átomo de " + el.name
-      : nextCI > 0 ? "Ref. ×10" + toSuperscript(nextCI)
-      : "Ref. ÷10" + toSuperscript(-nextCI);
-    drawCotaLine(cx, y, halfSmall, zoomArrowColor(nextCI),
-      "Ø " + formatLength(physDiam2), name2, ink, false);
   }
 }
 
@@ -505,7 +537,7 @@ function drawCotaDimension(cx, y, halfPx, col, diamLabel, nameLabel, ink) {
   }
 }
 
-// Recuadro superior derecho que advierte de que el núcleo no es visible aquí.
+// Recuadro superior izquierdo que advierte de que el núcleo no es visible aquí.
 // Flecha roja desde el borde del recuadro hasta el centro del átomo (nucCx, nucCy).
 function drawNucleusInfoBox(theme, nucCx, nucCy) {
   const card = cardColors(theme);
@@ -513,7 +545,7 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   const msg  = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
   const boxW = Math.min(252, Math.max(176, width * 0.36));
   const pad  = 12;
-  const x    = width - boxW - 14;
+  const x    = 14;
   const y    = 20;
 
   // Altura dinámica: simular word-wrap para contar líneas reales.
@@ -572,6 +604,104 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   // Marca roja en el borde izquierdo.
   noStroke();
   fill(red[0], red[1], red[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+
+  // Texto.
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(15);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
+  pop();
+}
+
+// Recuadro inferior derecho que explica la representación de los electrones.
+// Flecha del mismo color que los electrones, apuntando a la capa más externa visible.
+function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
+  const numShells = el.shells.length;
+  const zoomFactor = Math.pow(10, effectiveCI);
+
+  // Capa más externa visible (que quepa en el lienzo).
+  let outerRs = -1;
+  for (let s = numShells - 1; s >= 0; s--) {
+    const rs = atomR * (s + 1) / numShells / zoomFactor;
+    if (rs > 0 && rs <= Math.max(width, height)) { outerRs = rs; break; }
+  }
+  if (outerRs < 0) return;
+
+  const card = cardColors(theme);
+  const acc  = accentColor(theme);
+  const msg  = "Los electrones son más pequeños que el núcleo, pero los representamos como una bolita para que quede claro que estamos trabajando con átomos.";
+  const boxW = Math.min(155, Math.max(120, width * 0.18));
+  const pad  = 12;
+  const x    = width - boxW - 14;
+
+  // Altura dinámica por word-wrap.
+  push();
+  textSize(11.5);
+  textLeading(15);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 15 + pad + 16;
+  const y = 20;
+
+  // Punto objetivo: punto en el anillo exterior en dirección hacia el centro de la caja.
+  const boxCx = x + boxW / 2, boxCy = y + boxH / 2;
+  const dxDir = boxCx - cx, dyDir = boxCy - cy;
+  const dirDist = Math.sqrt(dxDir * dxDir + dyDir * dyDir);
+  if (dirDist === 0) { pop(); return; }
+  const ux = dxDir / dirDist, uy = dyDir / dirDist;
+  const targetX = cx + ux * outerRs, targetY = cy + uy * outerRs;
+
+  // Punto de anclaje en el borde del recuadro más cercano al target.
+  let anchorX, anchorY;
+  if (targetX < x) {
+    anchorX = x;
+    anchorY = Math.max(y, Math.min(y + boxH, targetY));
+  } else if (targetX > x + boxW) {
+    anchorX = x + boxW;
+    anchorY = Math.max(y, Math.min(y + boxH, targetY));
+  } else {
+    anchorX = Math.max(x, Math.min(x + boxW, targetX));
+    anchorY = targetY < y ? y : y + boxH;
+  }
+
+  const dx = targetX - anchorX, dy = targetY - anchorY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist === 0) { pop(); return; }
+  const arrowUx = dx / dist, arrowUy = dy / dist;
+
+  const GAP = 4, DEPTH = 8, HALF = 4;
+  const tipX  = targetX - arrowUx * GAP,       tipY  = targetY - arrowUy * GAP;
+  const baseX = tipX - arrowUx * DEPTH,         baseY = tipY - arrowUy * DEPTH;
+  const perpX = -arrowUy * HALF,                perpY = arrowUx * HALF;
+
+  // 1. Flecha (color de los electrones).
+  stroke(acc[0], acc[1], acc[2]);
+  strokeWeight(1.5);
+  line(anchorX, anchorY, baseX, baseY);
+  noStroke();
+  fill(acc[0], acc[1], acc[2]);
+  triangle(tipX, tipY, baseX + perpX, baseY + perpY, baseX - perpX, baseY - perpY);
+
+  // 2. Recuadro.
+  rectMode(CORNER);
+  stroke(card.border[0], card.border[1], card.border[2]);
+  strokeWeight(1);
+  fill(card.bg[0], card.bg[1], card.bg[2]);
+  rect(x, y, boxW, boxH, 9);
+
+  // Marca del color de los electrones en el borde izquierdo.
+  noStroke();
+  fill(acc[0], acc[1], acc[2]);
   rect(x + 1, y + 9, 3, boxH - 18, 2);
 
   // Texto.
@@ -713,10 +843,10 @@ function renderJourneyProgress() {
   const text = document.getElementById("ui-progress-text");
   const pct = total === 0 ? 50 : 50 + Math.round((clickIndex / total) * 50);
   if (fill) fill.style.width = pct + "%";
-  const factor = n => Math.pow(10, n).toLocaleString('es-ES');
+
   const label = clickIndex === 0 ? "Escala natural"
-    : clickIndex > 0 ? "Alejado ×" + factor(clickIndex)
-    : "Acercado ×" + factor(-clickIndex);
+    : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
+    : "Tamaño original × " + Math.pow(10, -clickIndex).toLocaleString('es-ES');
   if (text) text.innerText = label;
 
   const animating = zoomAnimDir !== 0;
@@ -770,8 +900,7 @@ function renderLadder() {
   const { atomR } = atomLayout();
   const n = maxClickIndex(el);
 
-  // Paso en que el núcleo se hace visible en canvas (nucleusR >= 0.5 px).
-  // Ese paso añade la barra roja del núcleo y no se añaden más barras a partir de entonces.
+  // El núcleo aparece cuando su tamaño en pantalla supera 0.5 px.
   let nucleusStep = n;
   for (let k = 1; k <= n; k++) {
     if ((el.nucleusDiameterM / el.atomDiameterM) * atomR * Math.pow(10, k) >= 0.5) {
