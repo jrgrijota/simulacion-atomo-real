@@ -21,14 +21,14 @@
 // n² (aproximación didáctica, no un cálculo cuántico riguroso).
 // ---------------------------------------------------------------------
 const ELEMENTS = [
-  { id: "H", name: "Hidrógeno", Z: 1, A: 1, shells: [1], atomicRadiusPm: 53 },
-  { id: "He", name: "Helio", Z: 2, A: 4, shells: [2], atomicRadiusPm: 31 },
-  { id: "C", name: "Carbono", Z: 6, A: 12, shells: [2, 4], atomicRadiusPm: 70 },
-  { id: "O", name: "Oxígeno", Z: 8, A: 16, shells: [2, 6], atomicRadiusPm: 60 },
-  { id: "Na", name: "Sodio", Z: 11, A: 23, shells: [2, 8, 1], atomicRadiusPm: 190 },
-  { id: "Fe", name: "Hierro", Z: 26, A: 56, shells: [2, 8, 14, 2], atomicRadiusPm: 126 },
-  { id: "Au", name: "Oro", Z: 79, A: 197, shells: [2, 8, 18, 32, 18, 1], atomicRadiusPm: 144 },
-  { id: "U", name: "Uranio", Z: 92, A: 238, shells: [2, 8, 18, 32, 21, 9, 2], atomicRadiusPm: 156 },
+  { id: "H",  name: "Hidrógeno", Z: 1,  A: 1,   shells: [1],             atomicRadiusPm: 53  },
+  { id: "He", name: "Helio",     Z: 2,  A: 4,   shells: [2],             atomicRadiusPm: 31  },
+  { id: "C",  name: "Carbono",   Z: 6,  A: 12,  shells: [2, 4],          atomicRadiusPm: 70  },
+  { id: "O",  name: "Oxígeno",   Z: 8,  A: 16,  shells: [2, 6],          atomicRadiusPm: 60  },
+  { id: "Na", name: "Sodio",     Z: 11, A: 23,  shells: [2, 8, 1],       atomicRadiusPm: 190 },
+  { id: "Cl", name: "Cloro",     Z: 17, A: 35,  shells: [2, 8, 7],       atomicRadiusPm: 100 },
+  { id: "Fe", name: "Hierro",    Z: 26, A: 56,  shells: [2, 8, 14, 2],   atomicRadiusPm: 126 },
+  { id: "Au", name: "Oro",       Z: 79, A: 197, shells: [2, 8, 18, 32, 18, 1], atomicRadiusPm: 144 },
 ];
 
 const SHELL_NAMES = ["K", "L", "M", "N", "O", "P", "Q"];
@@ -50,6 +50,11 @@ const PROTON_COLOR = [220, 50, 50];
 const NEUTRON_COLOR = [148, 163, 184];
 
 const BASE_PX = 100; // tamaño en píxeles del núcleo (salto 0) a escala "cómoda"
+
+// blobR (radio del átomo en px) por debajo del cual aparecen los átomos adyacentes.
+// Para todos los elementos con ≤ 3 capas el umbral blob y adyacente coinciden
+// en el tiempo; Fe y Au tienen una breve fase blob sin adyacente.
+const ADJACENT_ATOMS_THRESHOLD_PX = 20;
 
 // Colores de la flecha de referencia para cada salto de zoom-out (índice = clickIndex)
 const ZOOM_ARROW_COLORS = [
@@ -317,11 +322,17 @@ function drawAtomView(theme, el, effectiveCI) {
   const zoomFactor = Math.pow(10, effectiveCI);
   const blobR = atomR / zoomFactor;
   const minOrbitSpacingPx = atomR / numShells / zoomFactor;
-  const isBlob = minOrbitSpacingPx <= 6;
+  const isBlob       = minOrbitSpacingPx <= 6;
+  const showAdjacent = isBlob && blobR <= ADJACENT_ATOMS_THRESHOLD_PX;
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
-  if (isBlob) {
+  if (showAdjacent) {
+    for (let s = 0; s < numShells; s++) {
+      electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+    }
+    drawAdjacentStructure(el, cx, cy, blobR);
+  } else if (isBlob) {
     // Mantener ángulos actualizados para transición suave si se vuelve a zoom normal
     for (let s = 0; s < numShells; s++) {
       electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
@@ -1212,4 +1223,198 @@ function setupAppearanceEventListeners() {
       renderLadder();
     });
   }
+}
+
+// =====================================================================
+// Estructuras moleculares y cristalinas (zoom-out, átomos adyacentes)
+// =====================================================================
+
+function drawAdjacentStructure(el, cx, cy, blobR) {
+  switch (el.id) {
+    case "H": case "O":   drawWaterMolecules(cx, cy, blobR);        break;
+    case "C":             drawGraphiteLattice(cx, cy, blobR);       break;
+    case "Fe":            drawMetalLattice(cx, cy, blobR, false);   break;
+    case "Au":            drawMetalLattice(cx, cy, blobR, true);    break;
+    case "Na": case "Cl": drawNaClLattice(cx, cy, blobR);           break;
+    case "He":            drawHeliumAtoms(cx, cy, blobR);           break;
+  }
+}
+
+// ── H₂O: moléculas de agua dispuestas en filas alternadas ──────────────
+function drawWaterMolecules(cx, cy, blobR) {
+  const oR   = Math.max(blobR, 2);
+  const hR   = oR * 0.55;
+  const bLen = oR * 1.7;                       // distancia O–H (centro a centro)
+  const ang  = 52.25 * Math.PI / 180;          // semiángulo del enlace HOH
+  const hx   = bLen * Math.sin(ang);           // desplazamiento X del H
+  const hy   = bLen * Math.cos(ang);           // desplazamiento Y del H (arriba)
+
+  const spX = oR * 5.5;
+  const spY = oR * 5.0;
+  const iMin = -Math.ceil((cx + spX) / spX) - 1;
+  const iMax =  Math.ceil((width - cx + spX) / spX) + 1;
+  const jMin = -Math.ceil((cy + spY) / spY) - 1;
+  const jMax =  Math.ceil((height - cy + spY) / spY) + 1;
+
+  push();
+  noStroke();
+  for (let j = jMin; j <= jMax; j++) {
+    const offX = (j & 1) ? spX * 0.5 : 0;
+    for (let i = iMin; i <= iMax; i++) {
+      const ox = cx + i * spX + offX;
+      const oy = cy + j * spY;
+      // enlace O–H (línea fina)
+      stroke(160, 160, 180, 140);
+      strokeWeight(Math.max(0.6, oR * 0.18));
+      noFill();
+      line(ox, oy, ox - hx, oy - hy);
+      line(ox, oy, ox + hx, oy - hy);
+      // O rojo
+      noStroke();
+      fill(215, 55, 55);
+      circle(ox, oy, oR * 2);
+      // H blancos/azulados
+      fill(195, 220, 240);
+      circle(ox - hx, oy - hy, hR * 2);
+      circle(ox + hx, oy - hy, hR * 2);
+    }
+  }
+  pop();
+}
+
+// ── Grafito: red hexagonal de grafeno ──────────────────────────────────
+function drawGraphiteLattice(cx, cy, blobR) {
+  const d  = Math.max(blobR * 2.5, 3);         // longitud de enlace C–C en px
+  const s3 = Math.sqrt(3);
+  // Vectores primitivos de la red hexagonal
+  const a1x = s3 * d, a1y = 0;
+  const a2x = s3 * d / 2, a2y = 1.5 * d;
+  // Átomo B dentro de la celda unidad (respecto a A)
+  const bx = s3 * d / 2, by = d / 2;
+  // Los 3 enlaces desde cada A: hacia B(m,n), B(m-1,n), B(m,n-1)
+  const bonds = [[bx, by], [-bx, by], [0, -d]];
+
+  const margin = d * 3;
+  const mMax = Math.ceil((width  / 2 + margin) / a1x) + 2;
+  const nMax = Math.ceil((height / 2 + margin) / a2y) + 2;
+
+  push();
+  stroke(45, 55, 65, 210);
+  strokeWeight(Math.max(0.7, blobR * 0.35));
+  for (let m = -mMax; m <= mMax; m++) {
+    for (let n = -nMax; n <= nMax; n++) {
+      const ax = cx + m * a1x + n * a2x;
+      const ay = cy + m * a1y + n * a2y;
+      for (const [ox, oy] of bonds) line(ax, ay, ax + ox, ay + oy);
+    }
+  }
+  noStroke();
+  fill(70, 80, 95);
+  for (let m = -mMax; m <= mMax; m++) {
+    for (let n = -nMax; n <= nMax; n++) {
+      const ax = cx + m * a1x + n * a2x;
+      const ay = cy + m * a1y + n * a2y;
+      if (ax > -margin && ax < width + margin && ay > -margin && ay < height + margin)
+        circle(ax, ay, blobR * 2);
+      const bbx = ax + bx, bby = ay + by;
+      if (bbx > -margin && bbx < width + margin && bby > -margin && bby < height + margin)
+        circle(bbx, bby, blobR * 2);
+    }
+  }
+  pop();
+}
+
+// ── Metales: FCC (Au, hexagonal compacto 2D) o BCC (Fe, cuadrado + centro) ──
+function drawMetalLattice(cx, cy, blobR, isFCC) {
+  push();
+  noStroke();
+  if (isFCC) {
+    // Au: apilamiento hexagonal compacto (proyección de FCC)
+    fill(225, 175, 45);
+    const a  = Math.max(blobR * 2.25, 3);
+    const rH = a * Math.sqrt(3) / 2;
+    const iMin = -Math.ceil((cx + a)  / a)  - 1;
+    const iMax =  Math.ceil((width  - cx + a)  / a)  + 1;
+    const jMin = -Math.ceil((cy + rH) / rH) - 1;
+    const jMax =  Math.ceil((height - cy + rH) / rH) + 1;
+    for (let j = jMin; j <= jMax; j++) {
+      const offX = (j & 1) ? a * 0.5 : 0;
+      for (let i = iMin; i <= iMax; i++) {
+        circle(cx + i * a + offX, cy + j * rH, blobR * 2);
+      }
+    }
+  } else {
+    // Fe: red cúbica centrada en el cuerpo (BCC), proyección cuadrada + centro
+    fill(175, 95, 50);
+    const a    = Math.max(blobR * 3.0, 4);
+    const iMin = -Math.ceil((cx + a) / a) - 1;
+    const iMax =  Math.ceil((width  - cx + a) / a) + 1;
+    const jMin = -Math.ceil((cy + a) / a) - 1;
+    const jMax =  Math.ceil((height - cy + a) / a) + 1;
+    for (let j = jMin; j <= jMax; j++) {
+      for (let i = iMin; i <= iMax; i++) {
+        circle(cx + i * a,           cy + j * a,           blobR * 2);
+        circle(cx + i * a + a * 0.5, cy + j * a + a * 0.5, blobR * 2);
+      }
+    }
+  }
+  pop();
+}
+
+// ── NaCl: red cúbica alternando Na⁺ y Cl⁻ ─────────────────────────────
+function drawNaClLattice(cx, cy, blobR) {
+  // Radios iónicos reales: Na⁺ 1,02 Å · Cl⁻ 1,81 Å → ratio 0,56
+  const naR = Math.max(blobR * 0.95, 2);
+  const clR = Math.max(blobR * 1.70, 3);
+  const a   = Math.max((naR + clR) * 1.1, 5);  // distancia Na–Cl
+  const iMin = -Math.ceil((cx + a) / a) - 1;
+  const iMax =  Math.ceil((width  - cx + a) / a) + 1;
+  const jMin = -Math.ceil((cy + a) / a) - 1;
+  const jMax =  Math.ceil((height - cy + a) / a) + 1;
+
+  push();
+  noStroke();
+  for (let j = jMin; j <= jMax; j++) {
+    for (let i = iMin; i <= iMax; i++) {
+      const x = cx + i * a, y = cy + j * a;
+      if (((i + j) & 1) === 0) {
+        fill(235, 190, 55);   // Na⁺ amarillo dorado, más pequeño
+        circle(x, y, naR * 2);
+      } else {
+        fill(65, 190, 85);    // Cl⁻ verde, más grande
+        circle(x, y, clR * 2);
+      }
+    }
+  }
+  pop();
+}
+
+// ── He: átomos individuales con posición cuasi-aleatoria estable ───────
+function drawHeliumAtoms(cx, cy, blobR) {
+  const sp = Math.max(blobR * 7, 12);           // gas noble → separación grande
+  function stableNoise(i, j) {
+    // Hash determinista para dar posición fija sin noise() de p5
+    let h = (i * 374761393 + j * 668265263) | 0;
+    h ^= h >>> 13; h = (h * 1540483477) | 0; h ^= h >>> 15;
+    return ((h >>> 0) & 0x7FFFFFFF) / 0x7FFFFFFF;
+  }
+  const iMin = -Math.ceil((cx + sp) / sp) - 1;
+  const iMax =  Math.ceil((width  - cx + sp) / sp) + 1;
+  const jMin = -Math.ceil((cy + sp) / sp) - 1;
+  const jMax =  Math.ceil((height - cy + sp) / sp) + 1;
+
+  push();
+  noStroke();
+  fill(175, 195, 235);
+  for (let j = jMin; j <= jMax; j++) {
+    for (let i = iMin; i <= iMax; i++) {
+      const rx = (stableNoise(i * 7 + 3,  j * 5 + 1) - 0.5) * sp * 0.62;
+      const ry = (stableNoise(i * 5 + 11, j * 7 + 4) - 0.5) * sp * 0.62;
+      const x = cx + i * sp + rx;
+      const y = cy + j * sp + ry;
+      if (x > -blobR * 2 && x < width + blobR * 2 && y > -blobR * 2 && y < height + blobR * 2)
+        circle(x, y, blobR * 2);
+    }
+  }
+  pop();
 }
