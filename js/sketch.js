@@ -290,12 +290,18 @@ function draw() {
   drawAtomView(theme, el, effectiveCI);
 
   const { cx, cy, atomR } = atomLayout();
-  if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
-    drawNucleusInfoBox(theme, cx, cy);
-  }
-  drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI);
-  if (zoomAnimDir === 0 && clickIndex === -maxClickIndex(el)) {
-    drawNucleusReachedBox(theme, el);
+  const minOrbitSpacingPx = atomR / el.shells.length / Math.pow(10, effectiveCI);
+
+  if (minOrbitSpacingPx <= 6) {
+    drawPartsIndistinguishableBox(theme, cx, cy);
+  } else {
+    if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
+      drawNucleusInfoBox(theme, cx, cy);
+    }
+    drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI);
+    if (zoomAnimDir === 0 && clickIndex === -maxClickIndex(el)) {
+      drawNucleusReachedBox(theme, el);
+    }
   }
 }
 
@@ -309,51 +315,162 @@ function drawAtomView(theme, el, effectiveCI) {
 
   const acc = accentColor(theme);
   const zoomFactor = Math.pow(10, effectiveCI);
+  const blobR = atomR / zoomFactor;
+  const minOrbitSpacingPx = atomR / numShells / zoomFactor;
+  const isBlob = minOrbitSpacingPx <= 6;
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
-  // Relleno suave del interior del átomo (capa más externa visible).
-  // Cuando todas las capas superan el lienzo (zoom muy alto), el interior
-  // del átomo cubre toda la pantalla → se rellena el canvas completo.
-  push();
-  noStroke();
-  fill(acc[0], acc[1], acc[2], 22);
-  let atomFilled = false;
-  for (let s = numShells - 1; s >= 0; s--) {
-    const rs = atomR * (s + 1) / numShells / zoomFactor;
-    if (rs > 0 && rs <= Math.max(width, height)) { circle(cx, cy, rs * 2); atomFilled = true; break; }
-  }
-  if (!atomFilled) rect(0, 0, width, height);
-  pop();
-
-  push();
-  for (let s = 0; s < numShells; s++) {
-    const rs = atomR * (s + 1) / numShells / zoomFactor;
-
-    // Saltar capas que sobrepasarían el lienzo (zoom in)
-    if (rs <= 0 || rs > width) {
+  if (isBlob) {
+    // Mantener ángulos actualizados para transición suave si se vuelve a zoom normal
+    for (let s = 0; s < numShells; s++) {
       electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
-      continue;
     }
-
-    noFill();
-    stroke(acc[0], acc[1], acc[2], 150);
-    strokeWeight(1.3);
-    circle(cx, cy, rs * 2);
-
-    const ne = el.shells[s];
-    electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+    drawAtomBlob(theme, cx, cy, blobR);
+  } else {
+    // Relleno suave del interior del átomo (capa más externa visible).
+    // Cuando todas las capas superan el lienzo (zoom muy alto), el interior
+    // del átomo cubre toda la pantalla → se rellena el canvas completo.
+    push();
     noStroke();
-    fill(acc[0], acc[1], acc[2]);
-    for (let k = 0; k < ne; k++) {
-      const ang = electronAngles[s] + (k / ne) * TWO_PI;
-      circle(cx + rs * Math.cos(ang), cy + rs * Math.sin(ang), 6);
+    fill(acc[0], acc[1], acc[2], 22);
+    let atomFilled = false;
+    for (let s = numShells - 1; s >= 0; s--) {
+      const rs = atomR * (s + 1) / numShells / zoomFactor;
+      if (rs > 0 && rs <= Math.max(width, height)) { circle(cx, cy, rs * 2); atomFilled = true; break; }
     }
-  }
-  pop();
+    if (!atomFilled) rect(0, 0, width, height);
+    pop();
 
-  drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI);
+    push();
+    for (let s = 0; s < numShells; s++) {
+      const rs = atomR * (s + 1) / numShells / zoomFactor;
+
+      // Saltar capas que sobrepasarían el lienzo (zoom in)
+      if (rs <= 0 || rs > width) {
+        electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+        continue;
+      }
+
+      noFill();
+      stroke(acc[0], acc[1], acc[2], 150);
+      strokeWeight(1.3);
+      circle(cx, cy, rs * 2);
+
+      const ne = el.shells[s];
+      electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
+      noStroke();
+      fill(acc[0], acc[1], acc[2]);
+      for (let k = 0; k < ne; k++) {
+        const ang = electronAngles[s] + (k / ne) * TWO_PI;
+        circle(cx + rs * Math.cos(ang), cy + rs * Math.sin(ang), 6);
+      }
+    }
+    pop();
+
+    drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI);
+  }
+
   drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
+}
+
+// Átomo representado como esfera sólida cuando las partes ya no son distinguibles.
+function drawAtomBlob(theme, cx, cy, blobR) {
+  if (blobR < 0.5) return;
+  const acc = accentColor(theme);
+  push();
+  // Relleno sólido
+  noStroke();
+  fill(acc[0], acc[1], acc[2], 85);
+  circle(cx, cy, blobR * 2);
+  // Contorno
+  stroke(acc[0], acc[1], acc[2]);
+  strokeWeight(Math.min(2, Math.max(1, blobR * 0.04)));
+  noFill();
+  circle(cx, cy, blobR * 2);
+  // Brillo superior para efecto esfera
+  noStroke();
+  fill(255, 255, 255, 35);
+  const hr = blobR * 0.45;
+  circle(cx - blobR * 0.22, cy - blobR * 0.22, hr * 2);
+  pop();
+}
+
+// Recuadro único que reemplaza a los dos recuadros habituales cuando las partes
+// del átomo ya no son distinguibles. Flecha azul apuntando al centro del átomo.
+function drawPartsIndistinguishableBox(theme, cx, cy) {
+  const card = cardColors(theme);
+  const acc = accentColor(theme);
+  const msg = "El tamaño al que se representa el átomo es tan pequeño que ya no se pueden distinguir sus partes. Se representa como una esfera sólida.";
+  const boxW = Math.min(252, Math.max(176, width * 0.36));
+  const pad = 12;
+  const x = 14, y = 20;
+
+  push();
+  textSize(11.5);
+  textLeading(15);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 15 + pad + 16;
+
+  // Punto de anclaje en el borde del recuadro más cercano a (cx, cy)
+  let anchorX, anchorY;
+  if (cx < x) {
+    anchorX = x;
+    anchorY = Math.max(y, Math.min(y + boxH, cy));
+  } else if (cx > x + boxW) {
+    anchorX = x + boxW;
+    anchorY = Math.max(y, Math.min(y + boxH, cy));
+  } else {
+    anchorX = Math.max(x, Math.min(x + boxW, cx));
+    anchorY = cy < y ? y : y + boxH;
+  }
+
+  const dx = cx - anchorX, dy = cy - anchorY;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist === 0) { pop(); return; }
+  const ux = dx / dist, uy = dy / dist;
+
+  const GAP = 4, DEPTH = 8, HALF = 4;
+  const tipX  = cx - ux * GAP,        tipY  = cy - uy * GAP;
+  const baseX = tipX - ux * DEPTH,    baseY = tipY - uy * DEPTH;
+  const perpX = -uy * HALF,           perpY =  ux * HALF;
+
+  // Flecha (acento azul, igual que los electrones)
+  stroke(acc[0], acc[1], acc[2]);
+  strokeWeight(1.5);
+  line(anchorX, anchorY, baseX, baseY);
+  noStroke();
+  fill(acc[0], acc[1], acc[2]);
+  triangle(tipX, tipY, baseX + perpX, baseY + perpY, baseX - perpX, baseY - perpY);
+
+  // Recuadro
+  rectMode(CORNER);
+  stroke(card.border[0], card.border[1], card.border[2]);
+  strokeWeight(1);
+  fill(card.bg[0], card.bg[1], card.bg[2]);
+  rect(x, y, boxW, boxH, 9);
+
+  // Franja de color en el borde izquierdo
+  noStroke();
+  fill(acc[0], acc[1], acc[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+
+  // Texto
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(15);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
+  pop();
 }
 
 // Núcleo en el centro del lienzo. Se dibuja solo cuando supera 1 px de diámetro.
