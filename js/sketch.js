@@ -219,8 +219,8 @@ function maxClickIndex(el) {
 function macroZoomOutIndex(el) {
   const info = MACRO_OBJECTS[el.id];
   if (!info) return Infinity;
-  const n = Math.log10(info.sizeM * 400 / (800 * el.atomDiameterM));
-  return Math.ceil(n) + 1;
+  // Primer paso entero donde el canvas (≈ atomDiameterM × 10^k metros) contiene el objeto.
+  return Math.ceil(Math.log10(info.sizeM / el.atomDiameterM));
 }
 
 function maxZoomOutIndex(el) {
@@ -326,7 +326,9 @@ function draw() {
   const minOrbitSpacingPx = atomR / el.shells.length / Math.pow(10, effectiveCI);
   const inBlob      = minOrbitSpacingPx <= 6;
   const inContinuum = inBlob && blobRd < CONTINUUM_THRESHOLD_PX;
-  const inMacro     = inContinuum && effectiveCI >= macroZoomOutIndex(el);
+  const _macroInfo  = MACRO_OBJECTS[el.id];
+  const _canvasPhysW = width * el.atomDiameterM * Math.pow(10, effectiveCI) / (2 * atomR);
+  const inMacro     = inContinuum && !!_macroInfo && _macroInfo.sizeM <= _canvasPhysW;
 
   if (inMacro) {
     drawMacroInfoBox(theme, el);
@@ -360,7 +362,9 @@ function drawAtomView(theme, el, effectiveCI) {
   const isBlob       = minOrbitSpacingPx <= 6;
   const showAdjacent = isBlob && blobR <= ADJACENT_ATOMS_THRESHOLD_PX;
   const isContinuum  = isBlob && blobR < CONTINUUM_THRESHOLD_PX;
-  const isMacro      = isContinuum && effectiveCI >= macroZoomOutIndex(el);
+  const macroInfo    = MACRO_OBJECTS[el.id];
+  const canvasPhysW  = width * el.atomDiameterM * zoomFactor / (2 * atomR);
+  const isMacro      = isContinuum && !!macroInfo && macroInfo.sizeM <= canvasPhysW;
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
@@ -371,7 +375,8 @@ function drawAtomView(theme, el, effectiveCI) {
 
   if (isMacro) {
     tickAngles();
-    drawMacroObject(el);
+    const objPx = macroInfo.sizeM * width / canvasPhysW;
+    drawMacroObject(el, objPx);
     drawMacroComparisonCota(theme, cx, cy, atomR, el);
   } else if (isContinuum) {
     tickAngles();
@@ -1671,16 +1676,18 @@ function drawRing(cx, cy, sz) {
   pop();
 }
 
-function drawMacroObject(el) {
+function drawMacroObject(el, objPx) {
   const cx = width / 2;
-  const cy = height * 0.5;
-  const sz = Math.min(width, height) * 0.21;
+  const cy = height * 0.45;
 
   switch (el.id) {
-    case "H": case "O":   drawIceCube(cx, cy, sz);             break;
-    case "Na": case "Cl": drawGrainOfSalt(cx, cy, sz * 0.52);  break;
-    case "Fe":            drawNail(cx, cy, sz);                 break;
-    case "Au":            drawRing(cx, cy, sz);                 break;
+    // sz = mitad del lado frontal del cubo; el lado frontal = objPx
+    case "H": case "O":   drawIceCube(cx, cy, objPx / 2);      break;
+    case "Na": case "Cl": drawGrainOfSalt(cx, cy, objPx / 2);  break;
+    // El clavo tiene altura total ≈ sz×2.07; objPx = longitud del clavo
+    case "Fe":            drawNail(cx, cy, objPx / 2.07);       break;
+    // El anillo tiene diámetro exterior ≈ sz×1.68; objPx = diámetro del anillo
+    case "Au":            drawRing(cx, cy, objPx / 1.68);       break;
   }
 }
 
