@@ -56,6 +56,9 @@ const BASE_PX = 100; // tamaño en píxeles del núcleo (salto 0) a escala "cóm
 // en el tiempo; Fe y Au tienen una breve fase blob sin adyacente.
 const ADJACENT_ATOMS_THRESHOLD_PX = 20;
 
+// blobR < este valor (diámetro < 2 px) → representación como continuo.
+const CONTINUUM_THRESHOLD_PX = 1;
+
 // Colores de la flecha de referencia para cada salto de zoom-out (índice = clickIndex)
 const ZOOM_ARROW_COLORS = [
   null, // índice 0 → se usa accentColor (azul)
@@ -295,9 +298,14 @@ function draw() {
   drawAtomView(theme, el, effectiveCI);
 
   const { cx, cy, atomR } = atomLayout();
+  const blobRd = atomR / Math.pow(10, effectiveCI);
   const minOrbitSpacingPx = atomR / el.shells.length / Math.pow(10, effectiveCI);
+  const inBlob      = minOrbitSpacingPx <= 6;
+  const inContinuum = inBlob && blobRd < CONTINUUM_THRESHOLD_PX;
 
-  if (minOrbitSpacingPx <= 6) {
+  if (inContinuum) {
+    drawContinuumInfoBox(theme);
+  } else if (inBlob) {
     drawPartsIndistinguishableBox(theme, cx, cy);
   } else {
     if ((el.nucleusDiameterM / el.atomDiameterM) * atomR / Math.pow(10, effectiveCI) < 0.5) {
@@ -324,20 +332,26 @@ function drawAtomView(theme, el, effectiveCI) {
   const minOrbitSpacingPx = atomR / numShells / zoomFactor;
   const isBlob       = minOrbitSpacingPx <= 6;
   const showAdjacent = isBlob && blobR <= ADJACENT_ATOMS_THRESHOLD_PX;
+  const isContinuum  = isBlob && blobR < CONTINUUM_THRESHOLD_PX;
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
-  if (showAdjacent) {
-    for (let s = 0; s < numShells; s++) {
+  const tickAngles = () => {
+    for (let s = 0; s < numShells; s++)
       electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
-    }
+  };
+
+  if (isContinuum) {
+    tickAngles();
+    drawContinuum(el);
+  } else if (showAdjacent) {
+    tickAngles();
     drawAdjacentStructure(el, cx, cy, blobR);
+    drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
   } else if (isBlob) {
-    // Mantener ángulos actualizados para transición suave si se vuelve a zoom normal
-    for (let s = 0; s < numShells; s++) {
-      electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
-    }
+    tickAngles();
     drawAtomBlob(theme, cx, cy, blobR);
+    drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
   } else {
     // Relleno suave del interior del átomo (capa más externa visible).
     // Cuando todas las capas superan el lienzo (zoom muy alto), el interior
@@ -380,9 +394,8 @@ function drawAtomView(theme, el, effectiveCI) {
     pop();
 
     drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI);
+    drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
   }
-
-  drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
 }
 
 // Átomo representado como esfera sólida cuando las partes ya no son distinguibles.
@@ -1416,5 +1429,76 @@ function drawHeliumAtoms(cx, cy, blobR) {
         circle(x, y, blobR * 2);
     }
   }
+  pop();
+}
+
+// =====================================================================
+// Vista de continuo: átomo < 1 px de radio
+// =====================================================================
+
+// Color de fondo del continuo según el material.
+function continuumBgColor(el) {
+  switch (el.id) {
+    case "H": case "O":   return [30,  75, 160];   // agua — azul
+    case "C":             return [28,  32,  38];    // grafito — gris muy oscuro
+    case "Fe":            return [70,  58,  48];    // hierro — gris parduzco
+    case "Au":            return [155, 110,  20];   // oro — dorado oscuro
+    case "Na": case "Cl": return [200, 195, 185];   // sal — blanco hueso
+    case "He":            return [20,  25,  55];    // helio — negro azulado (gas)
+    default:              return [45,  55,  70];
+  }
+}
+
+// Rellena el lienzo con el color del material continuo.
+function drawContinuum(el) {
+  const col = continuumBgColor(el);
+  push();
+  noStroke();
+  fill(col[0], col[1], col[2]);
+  rect(0, 0, width, height);
+  pop();
+}
+
+// Recuadro informativo que aparece cuando se alcanza el régimen de continuo.
+// No lleva flecha porque el material llena todo el lienzo.
+function drawContinuumInfoBox(theme) {
+  const card = cardColors(theme);
+  const col  = [96, 165, 250];   // azul neutro — mismo tono en todos los temas
+  const msg  = "A esta escala los átomos son tan pequeños que no podemos distinguirlos de manera separada. La materia parece un continuo.";
+  const boxW = Math.min(280, Math.max(200, width * 0.38));
+  const pad  = 14;
+  const x = Math.round(width / 2 - boxW / 2);
+  const y = 20;
+
+  push();
+  textSize(11.5);
+  textLeading(15);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 15 + pad + 16;
+
+  rectMode(CORNER);
+  stroke(col[0], col[1], col[2], 180);
+  strokeWeight(1.2);
+  fill(card.bg[0], card.bg[1], card.bg[2], 230);
+  rect(x, y, boxW, boxH, 9);
+
+  noStroke();
+  fill(col[0], col[1], col[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(15);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
   pop();
 }
