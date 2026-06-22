@@ -59,6 +59,16 @@ const ADJACENT_ATOMS_THRESHOLD_PX = 20;
 // blobR < este valor (diámetro < 2 px) → representación como continuo.
 const CONTINUUM_THRESHOLD_PX = 1;
 
+// Objeto macroscópico representativo de cada material y su tamaño típico.
+const MACRO_OBJECTS = {
+  "H":  { label: "cubito de hielo", sizeM: 0.025 },
+  "O":  { label: "cubito de hielo", sizeM: 0.025 },
+  "Na": { label: "grano de sal",    sizeM: 5e-4  },
+  "Cl": { label: "grano de sal",    sizeM: 5e-4  },
+  "Fe": { label: "clavo",           sizeM: 0.05  },
+  "Au": { label: "anillo de oro",   sizeM: 0.02  },
+};
+
 // Colores de la flecha de referencia para cada salto de zoom-out (índice = clickIndex)
 const ZOOM_ARROW_COLORS = [
   null, // índice 0 → se usa accentColor (azul)
@@ -204,6 +214,20 @@ function maxClickIndex(el) {
   return i;
 }
 
+// Pasos de zoom-out (×10) necesarios para que el lienzo represente la escala del
+// objeto macroscópico del material. Asume atomR≈200 px, canvas width≈800 px.
+function macroZoomOutIndex(el) {
+  const info = MACRO_OBJECTS[el.id];
+  if (!info) return Infinity;
+  const n = Math.log10(info.sizeM * 400 / (800 * el.atomDiameterM));
+  return Math.ceil(n) + 1;
+}
+
+function maxZoomOutIndex(el) {
+  const mci = macroZoomOutIndex(el);
+  return isFinite(mci) ? mci : maxClickIndex(el);
+}
+
 // =====================================================================
 // p5 — ciclo de vida
 // =====================================================================
@@ -302,8 +326,11 @@ function draw() {
   const minOrbitSpacingPx = atomR / el.shells.length / Math.pow(10, effectiveCI);
   const inBlob      = minOrbitSpacingPx <= 6;
   const inContinuum = inBlob && blobRd < CONTINUUM_THRESHOLD_PX;
+  const inMacro     = inContinuum && effectiveCI >= macroZoomOutIndex(el);
 
-  if (inContinuum) {
+  if (inMacro) {
+    drawMacroInfoBox(theme, el);
+  } else if (inContinuum) {
     drawContinuumInfoBox(theme);
   } else if (inBlob) {
     drawPartsIndistinguishableBox(theme, cx, cy);
@@ -333,6 +360,7 @@ function drawAtomView(theme, el, effectiveCI) {
   const isBlob       = minOrbitSpacingPx <= 6;
   const showAdjacent = isBlob && blobR <= ADJACENT_ATOMS_THRESHOLD_PX;
   const isContinuum  = isBlob && blobR < CONTINUUM_THRESHOLD_PX;
+  const isMacro      = isContinuum && effectiveCI >= macroZoomOutIndex(el);
 
   while (electronAngles.length < numShells) electronAngles.push(random(TWO_PI));
 
@@ -341,7 +369,10 @@ function drawAtomView(theme, el, effectiveCI) {
       electronAngles[s] += (0.32 / Math.sqrt(s + 1)) * (deltaTime / 1000);
   };
 
-  if (isContinuum) {
+  if (isMacro) {
+    tickAngles();
+    drawMacroObject(el);
+  } else if (isContinuum) {
     tickAngles();
     drawContinuum(el);
   } else if (showAdjacent) {
@@ -1019,7 +1050,10 @@ function renderJourneyProgress() {
   if (track) track.setAttribute("aria-valuenow", pct);
 
   const atNucleus = total > 0 && clickIndex === -total;
+  const macroInfo = MACRO_OBJECTS[el.id];
+  const atMacro   = macroInfo && clickIndex >= macroZoomOutIndex(el);
   const label = atNucleus ? "¡Núcleo alcanzado! ×" + Math.pow(10, total).toLocaleString('es-ES')
+    : atMacro   ? "Escala macroscópica: " + macroInfo.label
     : clickIndex === 0 ? "Escala natural"
     : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
     : "Tamaño original ×" + Math.pow(10, -clickIndex).toLocaleString('es-ES');
@@ -1028,7 +1062,7 @@ function renderJourneyProgress() {
 
   const animating = zoomAnimDir !== 0;
   const btnOut = document.getElementById("ui-btn-zoom-out");
-  if (btnOut) btnOut.disabled = animating || clickIndex >= total;
+  if (btnOut) btnOut.disabled = animating || clickIndex >= maxZoomOutIndex(el);
   const btnIn = document.getElementById("ui-btn-zoom-in");
   if (btnIn) btnIn.disabled = animating || clickIndex <= -total;
 }
@@ -1151,7 +1185,7 @@ function setupUIEventListeners() {
   document.getElementById("ui-btn-zoom-out").addEventListener("click", () => {
     if (zoomAnimDir !== 0) return;
     const el = getElement();
-    if (clickIndex < maxClickIndex(el)) {
+    if (clickIndex < maxZoomOutIndex(el)) {
       zoomAnimDir = +1;
       zoomAnimT = 0;
       renderJourneyProgress(); // deshabilitar botones de inmediato
@@ -1485,6 +1519,206 @@ function drawContinuumInfoBox(theme) {
 
   rectMode(CORNER);
   stroke(col[0], col[1], col[2], 180);
+  strokeWeight(1.2);
+  fill(card.bg[0], card.bg[1], card.bg[2], 230);
+  rect(x, y, boxW, boxH, 9);
+
+  noStroke();
+  fill(col[0], col[1], col[2]);
+  rect(x + 1, y + 9, 3, boxH - 18, 2);
+
+  fill(card.ink[0], card.ink[1], card.ink[2]);
+  textAlign(LEFT, TOP);
+  textStyle(NORMAL);
+  textSize(11.5);
+  textLeading(15);
+  textWrap(WORD);
+  text(msg, x + pad, y + 12, boxW - pad - 10);
+  pop();
+}
+
+// =====================================================================
+// Objetos macroscópicos (zoom-out extremo)
+// =====================================================================
+
+// Cubo isométrico reutilizado para hielo y sal — solo varía el color.
+function drawIsoCube(cx, cy, sz, faceF, faceT, faceR, edgeCol) {
+  const ox = sz * 0.55, oy = sz * 0.32;
+  const sw = Math.max(0.8, sz * 0.022);
+  push();
+  strokeJoin(ROUND);
+  strokeWeight(sw);
+  // Cara derecha
+  fill(...faceR);  stroke(...edgeCol);
+  beginShape();
+  vertex(cx + sz,      cy - sz     );
+  vertex(cx + sz + ox, cy - sz - oy);
+  vertex(cx + sz + ox, cy + sz - oy);
+  vertex(cx + sz,      cy + sz     );
+  endShape(CLOSE);
+  // Cara superior
+  fill(...faceT);  stroke(...edgeCol);
+  beginShape();
+  vertex(cx - sz,      cy - sz     );
+  vertex(cx + sz,      cy - sz     );
+  vertex(cx + sz + ox, cy - sz - oy);
+  vertex(cx - sz + ox, cy - sz - oy);
+  endShape(CLOSE);
+  // Cara frontal
+  fill(...faceF);  stroke(...edgeCol);
+  beginShape();
+  vertex(cx - sz, cy - sz);
+  vertex(cx + sz, cy - sz);
+  vertex(cx + sz, cy + sz);
+  vertex(cx - sz, cy + sz);
+  endShape(CLOSE);
+  // Brillo
+  noStroke();
+  fill(255, 255, 255, 65);
+  ellipse(cx - sz * 0.22, cy - sz * 0.24, sz * 0.52, sz * 0.3);
+  pop();
+}
+
+function drawIceCube(cx, cy, sz) {
+  drawIsoCube(cx, cy, sz,
+    [170, 215, 242, 210],
+    [210, 238, 255, 210],
+    [128, 182, 220, 210],
+    [95, 150, 195]
+  );
+}
+
+function drawGrainOfSalt(cx, cy, sz) {
+  drawIsoCube(cx, cy, sz,
+    [238, 234, 226, 230],
+    [252, 250, 246, 230],
+    [215, 210, 200, 230],
+    [160, 155, 145]
+  );
+  push();
+  noStroke();
+  fill(255, 255, 255, 210);
+  const ss = sz * 0.09;
+  ellipse(cx - sz * 0.28, cy - sz * 0.3, ss * 2, ss * 2);
+  pop();
+}
+
+function drawNail(cx, cy, sz) {
+  const headW  = sz * 0.72;
+  const headH  = sz * 0.095;
+  const shaftW = sz * 0.13;
+  const headY  = cy - sz * 0.62;
+  const tipY   = cy + sz * 1.45;
+  const shaftTop = headY + headH * 2;
+  const sw = Math.max(0.7, sz * 0.018);
+
+  push();
+  strokeJoin(ROUND);
+  strokeWeight(sw);
+
+  stroke(68, 72, 80);
+  fill(148, 152, 162);
+  beginShape();
+  vertex(cx - shaftW, shaftTop);
+  vertex(cx + shaftW, shaftTop);
+  vertex(cx,          tipY);
+  endShape(CLOSE);
+
+  noStroke();
+  fill(200, 205, 215, 150);
+  beginShape();
+  vertex(cx - shaftW * 0.22, shaftTop);
+  vertex(cx + shaftW * 0.22, shaftTop);
+  vertex(cx + shaftW * 0.06, tipY * 0.72 + shaftTop * 0.28);
+  endShape(CLOSE);
+
+  stroke(68, 72, 80);
+  strokeWeight(sw);
+  fill(158, 163, 173);
+  ellipse(cx, headY + headH * 1.1, headW * 2, headH * 2);
+  noStroke();
+  fill(200, 205, 215);
+  ellipse(cx, headY + headH * 0.4, headW * 1.85, headH * 1.15);
+
+  pop();
+}
+
+function drawRing(cx, cy, sz) {
+  const outerR    = sz * 0.84;
+  const thickness = sz * 0.21;
+
+  push();
+  noFill();
+  stroke(55, 35, 0, 55);
+  strokeWeight(thickness * 1.05);
+  ellipse(cx + sz * 0.04, cy + sz * 0.07, outerR * 2, outerR * 1.42);
+
+  stroke(195, 148, 20);
+  strokeWeight(thickness);
+  ellipse(cx, cy, outerR * 2, outerR * 1.42);
+
+  stroke(248, 205, 72);
+  strokeWeight(thickness * 0.32);
+  arc(cx, cy, outerR * 2, outerR * 1.42, PI * 1.18, PI * 1.78);
+
+  stroke(255, 242, 160);
+  strokeWeight(thickness * 0.11);
+  arc(cx, cy, (outerR - thickness * 0.28) * 2, (outerR - thickness * 0.28) * 1.42,
+      PI * 1.22, PI * 1.58);
+
+  pop();
+}
+
+function drawMacroObject(el) {
+  const cx = width / 2;
+  const cy = height * 0.5;
+  const sz = Math.min(width, height) * 0.21;
+
+  switch (el.id) {
+    case "H": case "O":   drawIceCube(cx, cy, sz);             break;
+    case "Na": case "Cl": drawGrainOfSalt(cx, cy, sz * 0.52);  break;
+    case "Fe":            drawNail(cx, cy, sz);                 break;
+    case "Au":            drawRing(cx, cy, sz);                 break;
+  }
+}
+
+// Recuadro verde centrado que aparece al llegar a escala macroscópica.
+function drawMacroInfoBox(theme, el) {
+  const info = MACRO_OBJECTS[el.id];
+  if (!info) return;
+  const card = cardColors(theme);
+  const col  = theme === "high-contrast" ? [0, 255, 136] : [34, 197, 94];
+
+  const sizeStr = formatLength(info.sizeM);
+  const msgs = {
+    "H":  "Ahora vemos un cubito de hielo (≈ " + sizeStr + "). Está formado por moléculas de H₂O. A esta escala los átomos individuales son completamente invisibles.",
+    "O":  "Ahora vemos un cubito de hielo (≈ " + sizeStr + "). Está formado por moléculas de H₂O. A esta escala los átomos individuales son completamente invisibles.",
+    "Na": "Ahora vemos un grano de sal (≈ " + sizeStr + "). El NaCl forma un cristal cúbico perfecto, visible a simple vista.",
+    "Cl": "Ahora vemos un grano de sal (≈ " + sizeStr + "). El NaCl forma un cristal cúbico perfecto, visible a simple vista.",
+    "Fe": "Ahora vemos un clavo de hierro (≈ " + sizeStr + " de largo). Sus cristales BCC que vimos antes forman este objeto cotidiano.",
+    "Au": "Ahora vemos un anillo de oro (≈ " + sizeStr + " de diámetro). Sus átomos en red FCC forman este objeto macroscópico.",
+  };
+  const msg = msgs[el.id] || "";
+  const boxW = Math.min(290, Math.max(210, width * 0.4));
+  const pad  = 14;
+  const x    = Math.round(width / 2 - boxW / 2);
+  const y    = 20;
+
+  push();
+  textSize(11.5);
+  textLeading(15);
+  const lineW = boxW - pad - 10;
+  const words = msg.split(' ');
+  let numLines = 1, curW = 0;
+  for (const word of words) {
+    const ww = textWidth(word + ' ');
+    if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
+    else { curW += ww; }
+  }
+  const boxH = numLines * 15 + pad + 16;
+
+  rectMode(CORNER);
+  stroke(col[0], col[1], col[2], 190);
   strokeWeight(1.2);
   fill(card.bg[0], card.bg[1], card.bg[2], 230);
   rect(x, y, boxW, boxH, 9);
