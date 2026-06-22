@@ -372,9 +372,11 @@ function drawAtomView(theme, el, effectiveCI) {
   if (isMacro) {
     tickAngles();
     drawMacroObject(el);
+    drawMacroComparisonCota(theme, cx, cy, atomR, el);
   } else if (isContinuum) {
     tickAngles();
     drawContinuum(el);
+    drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI);
   } else if (showAdjacent) {
     tickAngles();
     drawAdjacentStructure(el, cx, cy, blobR);
@@ -1680,6 +1682,28 @@ function drawMacroObject(el) {
     case "Fe":            drawNail(cx, cy, sz);                 break;
     case "Au":            drawRing(cx, cy, sz);                 break;
   }
+}
+
+// Zona inferior de comparación en modo macro: dos cotas del mismo tamaño en px
+// pero con labels distintos — muestra el contraste átomo vs objeto macroscópico.
+function drawMacroComparisonCota(theme, cx, cy, atomR, el) {
+  const info = MACRO_OBJECTS[el.id];
+  if (!info) return;
+
+  const ink      = inkText(theme);
+  const atomCol  = zoomArrowColor(0);
+  const macroCol = theme === "high-contrast" ? [0, 255, 136] : [34, 197, 94];
+  const y        = cy + atomR + 24;
+  const halfPx   = width * 0.20;
+
+  drawCotaLine(width * 0.25, y, halfPx, atomCol,
+    "D = " + formatLength(el.atomDiameterM),
+    "Átomo de " + el.name, ink, false);
+
+  const label = info.label.charAt(0).toUpperCase() + info.label.slice(1);
+  drawCotaLine(width * 0.75, y, halfPx, macroCol,
+    "≈ " + formatLength(info.sizeM),
+    label, ink, false);
 }
 
 // Recuadro verde centrado que aparece al llegar a escala macroscópica.
