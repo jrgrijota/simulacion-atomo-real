@@ -257,7 +257,7 @@ function noteLD() { return noteNarrow() ? 13 : 15; }
 // use la medida real y no una sobreestimación que reduzca innecesariamente atomR.
 function electronInfoBoxRect() {
   const w = (noteNarrow() ? (width - 42) / 2 : Math.min(155, Math.max(120, width * 0.18)));
-  return { x: width - w - 14, y: 20, w: w, h: _electronBoxH };
+  return { x: width - w - (noteNarrow() ? 14 : 62), y: 20, w: w, h: _electronBoxH };
 }
 
 // Distancia de un punto al rectángulo r (0 si el punto está dentro).
@@ -666,7 +666,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
   const msg  = "Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.";
   const boxW = (noteNarrow() ? (width - 42) / 2 : Math.min(155, Math.max(120, width * 0.18)));
   const pad  = 12;
-  const x    = width - boxW - 14;
+  const x    = width - boxW - (noteNarrow() ? 14 : 62);   // deja sitio al engranaje
 
   // Altura dinámica por word-wrap.
   push();
