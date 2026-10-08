@@ -217,6 +217,14 @@ function setup() {
   setupAppearanceEventListeners();
   setupUIEventListeners();
   resetJourney(); // estado inicial + pinta panel lateral y franja inferior
+
+  // El contenedor puede cambiar de tamaño sin que cambie la ventana (al
+  // reorganizarse el diseño en el móvil): el lienzo lo sigue.
+  if (holder && window.ResizeObserver) {
+    new ResizeObserver(() => {
+      if (holder.offsetWidth !== width || holder.offsetHeight !== height) windowResized();
+    }).observe(holder);
+  }
 }
 
 function windowResized() {
@@ -235,14 +243,20 @@ function recomputeLayout() {
 
 // Rectángulo del recuadro del núcleo (arriba-izquierda).
 function nucleusInfoBoxRect() {
-  const w = Math.min(252, Math.max(176, width * 0.36));
-  return { x: 14, y: 20, w: w, h: 70 };
+  const w = noteNarrow() ? (width - 42) / 2 : Math.min(252, Math.max(176, width * 0.36));
+  return { x: 14, y: 20, w: w, h: noteNarrow() ? 84 : 70 };
 }
+// En lienzos estrechos (móvil) los recuadros de texto se reparten la anchura
+// a partes iguales y usan letra algo menor, para no tapar el átomo.
+function noteNarrow() { return width < 480; }
+function noteTS() { return noteNarrow() ? 10 : 11.5; }
+function noteLD() { return noteNarrow() ? 13 : 15; }
+
 // Rectángulo del recuadro de electrones (arriba-derecha).
 // La altura se actualiza cada frame desde drawElectronInfoBox() para que atomLayout()
 // use la medida real y no una sobreestimación que reduzca innecesariamente atomR.
 function electronInfoBoxRect() {
-  const w = Math.min(155, Math.max(120, width * 0.18));
+  const w = (noteNarrow() ? (width - 42) / 2 : Math.min(155, Math.max(120, width * 0.18)));
   return { x: width - w - 14, y: 20, w: w, h: _electronBoxH };
 }
 
@@ -259,7 +273,13 @@ function pointRectDist(px, py, r) {
 // de abajo pueda medir exactamente lo mismo que la flecha del diámetro.
 function atomLayout() {
   const cx = width / 2;
-  const areaTop = 26;
+  // En lienzos estrechos los recuadros ocupan todo el ancho de arriba: el átomo
+  // se dibuja debajo de ellos en vez de encogerse entre los dos.
+  let areaTop = 26;
+  if (noteNarrow()) {
+    const n = nucleusInfoBoxRect(), e = electronInfoBoxRect();
+    areaTop = Math.max(n.y + n.h, e.y + e.h) + 12;
+  }
   const areaBottom = height - 84; // espacio inferior para la cota y la leyenda
   const cy = (areaTop + areaBottom) / 2;
   let atomR = Math.max(24, Math.min((areaBottom - areaTop) / 2, (width - 140) / 2)) * 0.94;
@@ -552,15 +572,15 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   const card = cardColors(theme);
   const red  = stepColor(0);
   const msg  = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
-  const boxW = Math.min(252, Math.max(176, width * 0.36));
+  const boxW = noteNarrow() ? (width - 42) / 2 : Math.min(252, Math.max(176, width * 0.36));
   const pad  = 12;
   const x    = 14;
   const y    = 20;
 
   // Altura dinámica: simular word-wrap para contar líneas reales.
   push();
-  textSize(11.5);
-  textLeading(15);
+  textSize(noteTS());
+  textLeading(noteLD());
   const lineW = boxW - pad - 10;
   const words = msg.split(' ');
   let numLines = 1, curW = 0;
@@ -569,7 +589,7 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
     if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
     else { curW += ww; }
   }
-  const boxH = numLines * 15 + pad + 16;
+  const boxH = numLines * noteLD() + pad + 16;
 
   // Punto de anclaje en el borde del recuadro más cercano a (nucCx, nucCy).
   let anchorX, anchorY;
@@ -620,8 +640,8 @@ function drawNucleusInfoBox(theme, nucCx, nucCy) {
   fill(card.ink[0], card.ink[1], card.ink[2]);
   textAlign(LEFT, TOP);
   textStyle(NORMAL);
-  textSize(11.5);
-  textLeading(15);
+  textSize(noteTS());
+  textLeading(noteLD());
   textWrap(WORD);
   text(msg, x + pad, y + 12, boxW - pad - 10);
   pop();
@@ -644,14 +664,14 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
   const card = cardColors(theme);
   const acc  = accentColor(theme);
   const msg  = "Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.";
-  const boxW = Math.min(155, Math.max(120, width * 0.18));
+  const boxW = (noteNarrow() ? (width - 42) / 2 : Math.min(155, Math.max(120, width * 0.18)));
   const pad  = 12;
   const x    = width - boxW - 14;
 
   // Altura dinámica por word-wrap.
   push();
-  textSize(11.5);
-  textLeading(15);
+  textSize(noteTS());
+  textLeading(noteLD());
   const lineW = boxW - pad - 10;
   const words = msg.split(' ');
   let numLines = 1, curW = 0;
@@ -660,7 +680,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
     if (curW > 0 && curW + ww > lineW) { numLines++; curW = ww; }
     else { curW += ww; }
   }
-  const boxH = numLines * 15 + pad + 16;
+  const boxH = numLines * noteLD() + pad + 16;
   _electronBoxH = boxH; // sincroniza electronInfoBoxRect() con la altura real
   const y = 20;
 
@@ -719,8 +739,8 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
   fill(card.ink[0], card.ink[1], card.ink[2]);
   textAlign(LEFT, TOP);
   textStyle(NORMAL);
-  textSize(11.5);
-  textLeading(15);
+  textSize(noteTS());
+  textLeading(noteLD());
   textWrap(WORD);
   text(msg, x + pad, y + 12, boxW - pad - 10);
   pop();
@@ -809,7 +829,7 @@ function drawNucleusReachedBox(theme, el) {
   const green = theme === "high-contrast" ? [0, 255, 136] : [16, 185, 129];
   const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
   const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande.";
-  const boxW = Math.min(240, Math.max(180, width * 0.28));
+  const boxW = noteNarrow() ? width - 28 : Math.min(240, Math.max(180, width * 0.28));
   const pad = 12;
   const x = 14, y = 20;
   push();
