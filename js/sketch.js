@@ -186,6 +186,9 @@ function cardColors(theme) {
 
 function getElement() { return ELEMENT_DATA[currentElementId]; }
 
+// Radio de la capa s como fracción del radio del átomo (las capas crecen con n²).
+function shellFraction(el, s) { return el.shellDiametersM[s] / el.atomDiameterM; }
+
 
 // Saltos ×10 hasta el núcleo: los que caben sin que el núcleo desborde el
 // dibujo del átomo. El átomo es entre 10⁴ y 10⁵ veces mayor que su núcleo,
@@ -319,7 +322,7 @@ function drawAtomView(theme, el, effectiveCI) {
   fill(acc[0], acc[1], acc[2], 22);
   let atomFilled = false;
   for (let s = numShells - 1; s >= 0; s--) {
-    const rs = atomR * (s + 1) / numShells / zoomFactor;
+    const rs = atomR * shellFraction(el, s) / zoomFactor;
     if (rs > 0 && rs <= Math.max(width, height)) { circle(cx, cy, rs * 2); atomFilled = true; break; }
   }
   if (!atomFilled) rect(0, 0, width, height);
@@ -327,7 +330,7 @@ function drawAtomView(theme, el, effectiveCI) {
 
   push();
   for (let s = 0; s < numShells; s++) {
-    const rs = atomR * (s + 1) / numShells / zoomFactor;
+    const rs = atomR * shellFraction(el, s) / zoomFactor;
 
     // Saltar capas que sobrepasarían el lienzo (zoom in)
     if (rs <= 0 || rs > width) {
@@ -630,7 +633,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
   // Capa más externa visible (que quepa en el lienzo).
   let outerRs = -1;
   for (let s = numShells - 1; s >= 0; s--) {
-    const rs = atomR * (s + 1) / numShells / zoomFactor;
+    const rs = atomR * shellFraction(el, s) / zoomFactor;
     if (rs > 0 && rs <= Math.max(width, height)) { outerRs = rs; break; }
   }
   if (outerRs < 0) return;
