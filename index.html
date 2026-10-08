@@ -490,9 +490,15 @@
     @media (max-width: 860px) {
       body { overflow: auto; align-items: flex-start; }
       .simulation-container { grid-template-columns: 1fr; grid-template-rows: auto auto auto; height: auto; min-height: 0; }
-      .control-panel { grid-row: 1 / 2; grid-column: 1 / 2; overflow: visible; max-height: none; padding-right: 0; }
-      .canvas-area { grid-row: 2 / 3; grid-column: 1 / 2; aspect-ratio: 4 / 3; height: auto; }
+      /* En pantallas estrechas, el dibujo primero y justo debajo los botones
+         del viaje de zoom, que es la acción principal */
+      .canvas-area { grid-row: 1 / 2; grid-column: 1 / 2; aspect-ratio: 1 / 1; height: auto; }
+      .control-panel { grid-row: 2 / 3; grid-column: 1 / 2; overflow: visible; max-height: none; padding-right: 0; }
       .ladder-section { grid-row: 3 / 4; grid-column: 1 / 2; }
+      #ui-zoom-card { order: -1; }
+      /* El engranaje baja a la esquina inferior para no tapar los recuadros */
+      .theme-dropdown-container { top: auto; bottom: 12px; right: 12px; }
+      .dropdown-card { top: auto; bottom: calc(100% + 8px); }
       .ladder-row-label { width: 110px; }
     }
   </style>
@@ -547,7 +553,7 @@
         <div id="element-facts"></div>
       </div>
 
-      <div class="control-card">
+      <div class="control-card" id="ui-zoom-card">
         <h2>Viaje de zoom</h2>
         <div class="zoom-progress-track" id="ui-progress-track" title="Progreso hacia el núcleo"
              role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
