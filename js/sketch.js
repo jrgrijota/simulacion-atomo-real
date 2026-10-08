@@ -17,18 +17,21 @@
 // Catálogo de elementos: Z protones, A número de masa (isótopo común,
 // N = A-Z neutrones), y configuración electrónica simplificada por
 // capas (K, L, M…), tal como se enseña en secundaria. El radio atómico
-// empírico (pm) ancla la capa más externa; las internas se escalan con
-// n² (aproximación didáctica, no un cálculo cuántico riguroso).
+// (pm) ancla la capa más externa; las internas se escalan con n²
+// (aproximación didáctica, no un cálculo cuántico riguroso).
+// Todos los radios salen de la misma tabla para que sean comparables: radios
+// covalentes de Cordero et al., Dalton Trans. 2008, 2832 (cubre los 8
+// elementos, gases nobles incluidos; para el Fe, el valor de bajo espín).
 // ---------------------------------------------------------------------
 const ELEMENTS = [
-  { id: "H", name: "Hidrógeno", Z: 1, A: 1, shells: [1], atomicRadiusPm: 53 },
-  { id: "He", name: "Helio", Z: 2, A: 4, shells: [2], atomicRadiusPm: 31 },
-  { id: "C", name: "Carbono", Z: 6, A: 12, shells: [2, 4], atomicRadiusPm: 70 },
-  { id: "O", name: "Oxígeno", Z: 8, A: 16, shells: [2, 6], atomicRadiusPm: 60 },
-  { id: "Na", name: "Sodio", Z: 11, A: 23, shells: [2, 8, 1], atomicRadiusPm: 190 },
-  { id: "Fe", name: "Hierro", Z: 26, A: 56, shells: [2, 8, 14, 2], atomicRadiusPm: 126 },
-  { id: "Au", name: "Oro", Z: 79, A: 197, shells: [2, 8, 18, 32, 18, 1], atomicRadiusPm: 144 },
-  { id: "U", name: "Uranio", Z: 92, A: 238, shells: [2, 8, 18, 32, 21, 9, 2], atomicRadiusPm: 156 },
+  { id: "H", name: "Hidrógeno", Z: 1, A: 1, shells: [1], atomicRadiusPm: 31 },
+  { id: "He", name: "Helio", Z: 2, A: 4, shells: [2], atomicRadiusPm: 28 },
+  { id: "C", name: "Carbono", Z: 6, A: 12, shells: [2, 4], atomicRadiusPm: 76 },
+  { id: "O", name: "Oxígeno", Z: 8, A: 16, shells: [2, 6], atomicRadiusPm: 66 },
+  { id: "Na", name: "Sodio", Z: 11, A: 23, shells: [2, 8, 1], atomicRadiusPm: 166 },
+  { id: "Fe", name: "Hierro", Z: 26, A: 56, shells: [2, 8, 14, 2], atomicRadiusPm: 132 },
+  { id: "Au", name: "Oro", Z: 79, A: 197, shells: [2, 8, 18, 32, 18, 1], atomicRadiusPm: 136 },
+  { id: "U", name: "Uranio", Z: 92, A: 238, shells: [2, 8, 18, 32, 21, 9, 2], atomicRadiusPm: 196 },
 ];
 
 const SHELL_NAMES = ["K", "L", "M", "N", "O", "P", "Q"];
