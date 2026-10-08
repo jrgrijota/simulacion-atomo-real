@@ -186,14 +186,13 @@ function cardColors(theme) {
 
 function getElement() { return ELEMENT_DATA[currentElementId]; }
 
-// Diámetro real (m) que representa la línea del salto i (i=0 → el propio núcleo).
-function lineDiameterM(el, i) { return el.nucleusDiameterM * Math.pow(10, i); }
 
+// Saltos ×10 hasta el núcleo: los que caben sin que el núcleo desborde el
+// dibujo del átomo. El átomo es entre 10⁴ y 10⁵ veces mayor que su núcleo,
+// así que son 4 saltos (×10.000) y el núcleo ocupa al final entre 1/5 y 2/3
+// del círculo; el factor exacto lo da el recuadro «Estás viendo el núcleo».
 function maxClickIndex(el) {
-  const outerDiam = el.shellDiametersM[el.shellDiametersM.length - 1];
-  let i = 0;
-  while (lineDiameterM(el, i) < outerDiam && i < 30) i++;
-  return i;
+  return Math.floor(Math.log10(el.atomDiameterM / el.nucleusDiameterM));
 }
 
 // =====================================================================
