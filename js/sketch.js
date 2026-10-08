@@ -902,10 +902,13 @@ function makeNuclearRulerRow(col, name, pxNucleus, pxAtom, label) {
   const numTicks = tickInterval >= 6 ? Math.min(Math.floor(pxAtom / tickInterval), 2000) : 0;
 
   let innerHtml = '<div class="ladder-nucleus-bar" style="width:' + Math.max(pxNucleus, 0.5) + 'px; background:' + rgbStr(col) + ';"></div>';
+  // Rótulo solo en las marcas separadas al menos 56 px, para que no se solapen.
+  const labelEvery = Math.ceil(56 / Math.max(tickInterval, 1));
   for (let k = 1; k <= numTicks; k++) {
+    const lbl = k % labelEvery === 0 ? (k * 100).toLocaleString('es-ES') + '·D' : '';
     innerHtml +=
       '<div class="ladder-nucleus-tick" style="left:' + (k * tickInterval) + 'px;">' +
-        '<span class="ladder-nucleus-tick-lbl">' + (k * 100) + '·D</span>' +
+        '<span class="ladder-nucleus-tick-lbl">' + lbl + '</span>' +
         '<div class="ladder-nucleus-tick-line"></div>' +
       '</div>';
   }
