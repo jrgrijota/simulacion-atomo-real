@@ -831,7 +831,10 @@ function drawNucleusReachedBox(theme, el) {
   const card = cardColors(theme);
   const green = theme === "high-contrast" ? [0, 255, 136] : [16, 185, 129];
   const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
-  const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande.";
+  // Analogía para hacerse una idea: el núcleo como una canica de 1 cm
+  const metros = Math.round(el.atomDiameterM / el.nucleusDiameterM / 100).toLocaleString('es-ES');
+  const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande: " +
+              "si el núcleo fuera una canica de 1 cm, el átomo mediría " + metros + " m.";
   const boxW = noteNarrow() ? width - 28 : Math.min(240, Math.max(180, width * 0.28));
   const pad = 12;
   const x = 14, y = 20;
