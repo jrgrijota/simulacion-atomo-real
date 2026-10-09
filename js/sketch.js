@@ -390,7 +390,10 @@ function drawNucleusOnCanvas(cx, cy, atomR, el, effectiveCI) {
   const red = stepColor(0);
 
   if (!nucleonAnim || nucleonAnim.elementId !== el.id) initNucleonAnim(el);
-  updateNucleonAnim(deltaTime / 1000);
+  // Radio de cada nucleón respecto al del núcleo: el centro no puede pasar de
+  // (1 − ese radio), para que ningún nucleón asome fuera (en el H es casi todo).
+  const dotFrac = Math.min(1 / Math.sqrt(el.A), 0.9);
+  updateNucleonAnim(deltaTime / 1000, Math.max(0.04, Math.min(0.93, 1 - dotFrac)));
 
   push();
 
@@ -785,11 +788,11 @@ function initNucleonAnim(el) {
 }
 
 // Movimiento browniano confinado dentro del radio del núcleo (coordenadas normalizadas).
-function updateNucleonAnim(dt) {
+function updateNucleonAnim(dt, limit = 0.93) {
   if (!nucleonAnim) return;
-  const KICK   = 15.0; // amplitud del impulso aleatorio (radio/s)
+  const KICK   = 15.0 * limit; // amplitud del impulso aleatorio (radio/s)
   const DAMP   = 0.3;  // tasa de amortiguación continua (1/s)
-  const WALL   = 0.84; // radio de la pared blanda (normalizado)
+  const WALL   = 0.9 * limit; // radio de la pared blanda (normalizado)
   const WALL_K = 8.0;  // rigidez de la pared blanda
 
   for (const p of nucleonAnim.particles) {
@@ -811,10 +814,10 @@ function updateNucleonAnim(dt) {
     p.y += p.vy * dt;
 
     const rNew = Math.sqrt(p.x * p.x + p.y * p.y);
-    if (rNew > 0.93) {
-      p.x *= 0.93 / rNew;
-      p.y *= 0.93 / rNew;
-      const nx = p.x / 0.93, ny = p.y / 0.93;
+    if (rNew > limit) {
+      p.x *= limit / rNew;
+      p.y *= limit / rNew;
+      const nx = p.x / limit, ny = p.y / limit;
       const dot = p.vx * nx + p.vy * ny;
       if (dot > 0) { p.vx -= dot * nx; p.vy -= dot * ny; }
     }
