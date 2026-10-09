@@ -887,7 +887,7 @@ function renderElementFacts() {
     ["Neutrones (N)", el.N],
     ["Diámetro del núcleo", formatLength(el.nucleusDiameterM)],
     ["Diámetro del átomo", formatLength(el.atomDiameterM)],
-    ["Tasa átomo / núcleo", ratio + " : 1"],
+    ["El átomo es mayor que su núcleo", ratio + " veces"],
     ["Capas electrónicas", el.shells.length + " (" + el.shells.map((c, i) => SHELL_NAMES[i] + ":" + c).join(", ") + ")"],
   ];
   box.innerHTML = rows.map((r) => '<div class="fact-row"><span>' + r[0] + '</span><span class="fact-value">' + r[1] + "</span></div>").join("");
