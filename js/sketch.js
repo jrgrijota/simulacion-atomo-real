@@ -120,6 +120,13 @@ function formatTimes(ratio) {
   return i18n.t("{n} veces", { n: i18n.num(mantissa, 2) + " × 10" + toSuperscript(exp) });
 }
 
+// «Átomo de {el}» / «Núcleo de {el}» con el nombre del elemento traducido. En catalán
+// «de» se apostrofa ante vocal o h: «Àtom d'Hidrogen», «Nucli d'Or».
+function nameWithElement(key, el) {
+  const s = i18n.t(key, { el: i18n.t(el.name) });
+  return i18n.lang === "ca" ? s.replace(/ de (?=[aeiouàèéíïòóúüh])/gi, " d'") : s;
+}
+
 // Entero con separador de miles del idioma activo (10.000 en español, 10,000 en inglés).
 function formatInt(n) {
   return n.toLocaleString(i18n.lang === "en" ? "en-GB" : "es-ES");
@@ -455,7 +462,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
   function drawNucleusRef(nucR) {
     const col = stepColor(0);
     const diam = diamLabel(el.nucleusDiameterM);
-    const nom  = i18n.t("Núcleo de {el}", { el: i18n.t(el.name) });
+    const nom  = nameWithElement("Núcleo de {el}", el);
     if (nucR < 2 * ARROW_HEAD) drawCotaDimension(cx, y, nucR, col, diam, nom, ink);
     else                        drawCotaLine(cx, y, nucR, col, diam, nom, ink, false);
   }
@@ -467,7 +474,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
     } else {
       const col = zoomArrowColor(clickIndex);
       const physDiam = el.atomDiameterM * Math.pow(10, clickIndex);
-      const lbl = clickIndex === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : null;
+      const lbl = clickIndex === 0 ? nameWithElement("Átomo de {el}", el) : null;
       drawCotaLine(cx, y, atomR, col, diamLabel(physDiam), lbl, ink, false);
     }
   } else {
@@ -493,7 +500,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
         drawNucleusRef(nucR_anim);
       } else {
         const physDiam2 = el.atomDiameterM * Math.pow(10, nextCI);
-        const name2 = nextCI === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : null;
+        const name2 = nextCI === 0 ? nameWithElement("Átomo de {el}", el) : null;
         drawCotaLine(cx, y, halfSmall, zoomArrowColor(nextCI), diamLabel(physDiam2), name2, ink, false);
       }
     }
@@ -998,12 +1005,12 @@ function renderLadder() {
     if (isNucleus) {
       physDiam = el.nucleusDiameterM;
       col = stepColor(0); // rojo — mismo que la cota del núcleo en el canvas
-      name = i18n.t("Núcleo de {el}", { el: i18n.t(el.name) });
+      name = nameWithElement("Núcleo de {el}", el);
     } else {
       // physDiam coincide con lo que representa la flecha del canvas cuando clickIndex = -j
       physDiam = el.atomDiameterM * Math.pow(10, -j);
       col = zoomArrowColor(-j); // idéntico al color de la flecha en ese paso de zoom
-      name = j === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : i18n.t("1/{n} del átomo", { n: formatInt(Math.pow(10, j)) });
+      name = j === 0 ? nameWithElement("Átomo de {el}", el) : i18n.t("1/{n} del átomo", { n: formatInt(Math.pow(10, j)) });
     }
     // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
     const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
