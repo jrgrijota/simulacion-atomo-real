@@ -1,19 +1,21 @@
-// Idioma de la interfaz. Español por defecto; con ?lang=en se muestra en inglés
-// (es lo que carga simulaciencia.es/en/). Las traducciones están en js/i18n-en.js,
-// un diccionario «texto en español» → «texto en inglés».
+// Idioma de la interfaz. Español por defecto; con ?lang=en se muestra en inglés y
+// con ?lang=ca en catalán (es lo que cargan simulaciencia.es/en/ y /ca/). Las
+// traducciones están en js/i18n-en.js y js/i18n-ca.js, diccionarios
+// «texto en español» → «texto traducido».
 //
 //  · El HTML no se toca: al cargar, los textos (y los atributos title, placeholder,
 //    aria-label y alt) que coinciden exactamente con una clave se sustituyen.
 //    Un elemento con data-i18n="clave" recibe como innerHTML la traducción de
 //    «clave» (para frases con <b>, <sub>… dentro).
 //  · En JS, i18n.t('Texto con {n} valores', { n: 3 }) devuelve el texto en el
-//    idioma activo, i18n.num(1.5, 2) escribe el número con coma (es) o punto (en)
-//    e i18n.lang dice el idioma ('es' o 'en'). Si hay HTML nuevo con textos fijos,
+//    idioma activo, i18n.num(1.5, 2) escribe el número con coma (es, ca) o punto (en)
+//    e i18n.lang dice el idioma ('es', 'en' o 'ca'). Si hay HTML nuevo con textos fijos,
 //    i18n.translateTree(elemento) lo traduce igual que al cargar.
 //  · Si falta una traducción, se queda en español.
 (function () {
-  var lang = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'es';
-  var dict = lang === 'en' ? window.I18N_EN || {} : {};
+  var param = new URLSearchParams(location.search).get('lang');
+  var lang = param === 'en' || param === 'ca' ? param : 'es';
+  var dict = (lang === 'en' ? window.I18N_EN : lang === 'ca' ? window.I18N_CA : null) || {};
 
   function lookup(es) {
     return Object.prototype.hasOwnProperty.call(dict, es) ? dict[es] : es;
@@ -57,7 +59,7 @@
   window.i18n = { lang: lang, t: t, num: num, translateTree: translateTree };
 
   if (lang === 'es') return;
-  document.documentElement.lang = 'en';
+  document.documentElement.lang = lang;
   if (Object.prototype.hasOwnProperty.call(dict, document.title)) document.title = dict[document.title];
   function run() { translateTree(document.body); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
