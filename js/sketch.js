@@ -113,19 +113,24 @@ function formatTimes(ratio) {
   if (!isFinite(ratio) || ratio <= 0) return "—";
   if (ratio < 1000) {
     const r = Math.round(ratio * 10) / 10;
-    return (r % 1 === 0 ? r.toFixed(0) : r.toFixed(1).replace(".", ",")) + " veces";
+    return i18n.t("{n} veces", { n: r % 1 === 0 ? r.toFixed(0) : i18n.num(r, 1) });
   }
   const exp = Math.floor(Math.log10(ratio));
   const mantissa = ratio / Math.pow(10, exp);
-  return mantissa.toFixed(2).replace(".", ",") + " × 10" + toSuperscript(exp) + " veces";
+  return i18n.t("{n} veces", { n: i18n.num(mantissa, 2) + " × 10" + toSuperscript(exp) });
+}
+
+// Entero con separador de miles del idioma activo (10.000 en español, 10,000 en inglés).
+function formatInt(n) {
+  return n.toLocaleString(i18n.lang === "en" ? "en-GB" : "es-ES");
 }
 
 function formatSig(value, sig) {
   if (value === 0) return "0";
   const rounded = parseFloat(value.toPrecision(sig));
   return Math.abs(rounded) >= 1
-    ? rounded.toLocaleString("es-ES", { maximumFractionDigits: Math.max(0, sig - String(Math.trunc(Math.abs(rounded))).length) })
-    : rounded.toString().replace(".", ",");
+    ? rounded.toLocaleString(i18n.lang === "en" ? "en-GB" : "es-ES", { maximumFractionDigits: Math.max(0, sig - String(Math.trunc(Math.abs(rounded))).length) })
+    : i18n.num(rounded);
 }
 
 function formatLength(m) {
@@ -150,7 +155,7 @@ function formatScientificM(m) {
   if (m === 0) return "0 m";
   const exp = Math.floor(Math.log10(Math.abs(m)));
   const mant = m / Math.pow(10, exp);
-  return mant.toFixed(2).replace(".", ",") + " × 10" + toSuperscript(exp) + " m";
+  return i18n.num(mant, 2) + " × 10" + toSuperscript(exp) + " m";
 }
 
 function categoryColor(entry) {
@@ -450,7 +455,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
   function drawNucleusRef(nucR) {
     const col = stepColor(0);
     const diam = diamLabel(el.nucleusDiameterM);
-    const nom  = "Núcleo de " + el.name;
+    const nom  = i18n.t("Núcleo de {el}", { el: i18n.t(el.name) });
     if (nucR < 2 * ARROW_HEAD) drawCotaDimension(cx, y, nucR, col, diam, nom, ink);
     else                        drawCotaLine(cx, y, nucR, col, diam, nom, ink, false);
   }
@@ -462,7 +467,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
     } else {
       const col = zoomArrowColor(clickIndex);
       const physDiam = el.atomDiameterM * Math.pow(10, clickIndex);
-      const lbl = clickIndex === 0 ? "Átomo de " + el.name : null;
+      const lbl = clickIndex === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : null;
       drawCotaLine(cx, y, atomR, col, diamLabel(physDiam), lbl, ink, false);
     }
   } else {
@@ -488,7 +493,7 @@ function drawDiameterCota(theme, cx, cy, atomR, el, effectiveCI) {
         drawNucleusRef(nucR_anim);
       } else {
         const physDiam2 = el.atomDiameterM * Math.pow(10, nextCI);
-        const name2 = nextCI === 0 ? "Átomo de " + el.name : null;
+        const name2 = nextCI === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : null;
         drawCotaLine(cx, y, halfSmall, zoomArrowColor(nextCI), diamLabel(physDiam2), name2, ink, false);
       }
     }
@@ -574,7 +579,7 @@ function drawCotaDimension(cx, y, halfPx, col, diamLabel, nameLabel, ink) {
 function drawNucleusInfoBox(theme, nucCx, nucCy) {
   const card = cardColors(theme);
   const red  = stepColor(0);
-  const msg  = "El núcleo está en el centro, pero es demasiado pequeño para verlo.";
+  const msg  = i18n.t("El núcleo está en el centro, pero es demasiado pequeño para verlo.");
   const boxW = noteNarrow() ? (width - 42) / 2 : Math.min(252, Math.max(176, width * 0.36));
   const pad  = 12;
   const x    = 14;
@@ -666,7 +671,7 @@ function drawElectronInfoBox(theme, cx, cy, atomR, el, effectiveCI) {
 
   const card = cardColors(theme);
   const acc  = accentColor(theme);
-  const msg  = "Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.";
+  const msg  = i18n.t("Representamos los electrones como puntos para que puedas ver en qué capa están, no para indicar su tamaño real.");
   const boxW = (noteNarrow() ? (width - 42) / 2 : Math.min(155, Math.max(120, width * 0.18)));
   const pad  = 12;
   const x    = width - boxW - (noteNarrow() ? 14 : 62);   // deja sitio al engranaje
@@ -830,11 +835,11 @@ function updateNucleonAnim(dt, limit = 0.93) {
 function drawNucleusReachedBox(theme, el) {
   const card = cardColors(theme);
   const green = theme === "high-contrast" ? [0, 255, 136] : [16, 185, 129];
-  const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
+  const ratio = formatInt(Math.round(el.atomDiameterM / el.nucleusDiameterM));
   // Analogía para hacerse una idea: el núcleo como una canica de 1 cm
-  const metros = Math.round(el.atomDiameterM / el.nucleusDiameterM / 100).toLocaleString('es-ES');
-  const msg = "Estás viendo el núcleo. El átomo completo es " + ratio + " veces más grande: " +
-              "si el núcleo fuera una canica de 1 cm, el átomo mediría " + metros + " m.";
+  const metros = formatInt(Math.round(el.atomDiameterM / el.nucleusDiameterM / 100));
+  const msg = i18n.t("Estás viendo el núcleo. El átomo completo es {ratio} veces más grande: " +
+              "si el núcleo fuera una canica de 1 cm, el átomo mediría {m} m.", { ratio: ratio, m: metros });
   const boxW = noteNarrow() ? width - 28 : Math.min(240, Math.max(180, width * 0.28));
   const pad = 12;
   const x = 14, y = 20;
@@ -874,21 +879,21 @@ function drawNucleusReachedBox(theme, el) {
 
 function populateElementSelect() {
   const select = document.getElementById("ui-element-select");
-  select.innerHTML = ELEMENTS.map((el) => '<option value="' + el.id + '">' + el.name + " (Z=" + el.Z + ")</option>").join("");
+  select.innerHTML = ELEMENTS.map((el) => '<option value="' + el.id + '">' + i18n.t(el.name) + " (Z=" + el.Z + ")</option>").join("");
   select.value = currentElementId;
 }
 
 function renderElementFacts() {
   const el = getElement();
   const box = document.getElementById("element-facts");
-  const ratio = Math.round(el.atomDiameterM / el.nucleusDiameterM).toLocaleString('es-ES');
+  const ratio = formatInt(Math.round(el.atomDiameterM / el.nucleusDiameterM));
   const rows = [
-    ["Protones (Z)", el.Z],
-    ["Neutrones (N)", el.N],
-    ["Diámetro del núcleo", formatLength(el.nucleusDiameterM)],
-    ["Diámetro del átomo", formatLength(el.atomDiameterM)],
-    ["El átomo es mayor que su núcleo", ratio + " veces"],
-    ["Capas electrónicas", el.shells.length + " (" + el.shells.map((c, i) => SHELL_NAMES[i] + ":" + c).join(", ") + ")"],
+    [i18n.t("Protones (Z)"), el.Z],
+    [i18n.t("Neutrones (N)"), el.N],
+    [i18n.t("Diámetro del núcleo"), formatLength(el.nucleusDiameterM)],
+    [i18n.t("Diámetro del átomo"), formatLength(el.atomDiameterM)],
+    [i18n.t("El átomo es mayor que su núcleo"), i18n.t("{n} veces", { n: ratio })],
+    [i18n.t("Capas electrónicas"), el.shells.length + " (" + el.shells.map((c, i) => SHELL_NAMES[i] + ":" + c).join(", ") + ")"],
   ];
   box.innerHTML = rows.map((r) => '<div class="fact-row"><span>' + r[0] + '</span><span class="fact-value">' + r[1] + "</span></div>").join("");
 }
@@ -909,10 +914,10 @@ function renderJourneyProgress() {
   if (track) track.setAttribute("aria-valuenow", pct);
 
   const atNucleus = total > 0 && clickIndex === -total;
-  const label = atNucleus ? "¡Núcleo alcanzado! ×" + Math.pow(10, total).toLocaleString('es-ES')
-    : clickIndex === 0 ? "Escala natural"
-    : clickIndex > 0 ? "Alejado ×" + Math.pow(10, clickIndex).toLocaleString('es-ES')
-    : "Tamaño original ×" + Math.pow(10, -clickIndex).toLocaleString('es-ES');
+  const label = atNucleus ? i18n.t("¡Núcleo alcanzado! ×{n}", { n: formatInt(Math.pow(10, total)) })
+    : clickIndex === 0 ? i18n.t("Escala natural")
+    : clickIndex > 0 ? i18n.t("Alejado ×{n}", { n: formatInt(Math.pow(10, clickIndex)) })
+    : i18n.t("Tamaño original ×{n}", { n: formatInt(Math.pow(10, -clickIndex)) });
   if (text) text.innerText = label;
   if (steps) steps.textContent = clickIndex !== 0 ? Math.abs(clickIndex) + " / " + total : "";
 
@@ -931,7 +936,7 @@ function makeNuclearRulerRow(col, name, pxNucleus, pxAtom, label) {
   // Rótulo solo en las marcas separadas al menos 56 px, para que no se solapen.
   const labelEvery = Math.ceil(56 / Math.max(tickInterval, 1));
   for (let k = 1; k <= numTicks; k++) {
-    const lbl = k % labelEvery === 0 ? (k * 100).toLocaleString('es-ES') + '·D' : '';
+    const lbl = k % labelEvery === 0 ? formatInt(k * 100) + '·D' : '';
     innerHtml +=
       '<div class="ladder-nucleus-tick" style="left:' + (k * tickInterval) + 'px;">' +
         '<span class="ladder-nucleus-tick-lbl">' + lbl + '</span>' +
@@ -993,12 +998,12 @@ function renderLadder() {
     if (isNucleus) {
       physDiam = el.nucleusDiameterM;
       col = stepColor(0); // rojo — mismo que la cota del núcleo en el canvas
-      name = "Núcleo de " + el.name;
+      name = i18n.t("Núcleo de {el}", { el: i18n.t(el.name) });
     } else {
       // physDiam coincide con lo que representa la flecha del canvas cuando clickIndex = -j
       physDiam = el.atomDiameterM * Math.pow(10, -j);
       col = zoomArrowColor(-j); // idéntico al color de la flecha en ese paso de zoom
-      name = j === 0 ? "Átomo de " + el.name : "1/" + Math.pow(10, j).toLocaleString('es-ES') + " del átomo";
+      name = j === 0 ? i18n.t("Átomo de {el}", { el: i18n.t(el.name) }) : i18n.t("1/{n} del átomo", { n: formatInt(Math.pow(10, j)) });
     }
     // px coincide con 2·atomR cuando clickIndex = -j (el momento en que nace la barra)
     const px = (physDiam / el.atomDiameterM) * 2 * atomR * Math.pow(10, -clickIndex);
