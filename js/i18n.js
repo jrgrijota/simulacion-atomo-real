@@ -1,20 +1,20 @@
 // Idioma de la interfaz. Español por defecto; con ?lang=en se muestra en inglés,
-// con ?lang=ca en catalán y con ?lang=eu en euskera (es lo que cargan
-// simulaciencia.es/en/, /ca/ y /eu/). Las traducciones están en js/i18n-en.js,
-// js/i18n-ca.js y js/i18n-eu.js, diccionarios «texto en español» → «texto traducido».
+// con ?lang=ca en catalán, con ?lang=eu en euskera y con ?lang=gl en gallego (es lo que cargan
+// simulaciencia.es/en/, /ca/, /eu/ y /gl/). Las traducciones están en js/i18n-en.js,
+// js/i18n-ca.js, js/i18n-eu.js y js/i18n-gl.js, diccionarios «texto en español» → «texto traducido».
 //
 //  · El HTML no se toca: al cargar, los textos (y los atributos title, placeholder,
 //    aria-label y alt) que coinciden exactamente con una clave se sustituyen.
 //    Un elemento con data-i18n="clave" recibe como innerHTML la traducción de
 //    «clave» (para frases con <b>, <sub>… dentro).
 //  · En JS, i18n.t('Texto con {n} valores', { n: 3 }) devuelve el texto en el
-//    idioma activo, i18n.num(1.5, 2) escribe el número con coma (es, ca, eu) o punto (en)
-//    e i18n.lang dice el idioma ('es', 'en', 'ca' o 'eu'). Si hay HTML nuevo con textos fijos,
+//    idioma activo, i18n.num(1.5, 2) escribe el número con coma (es, ca, eu, gl) o punto (en)
+//    e i18n.lang dice el idioma ('es', 'en', 'ca', 'eu' o 'gl'). Si hay HTML nuevo con textos fijos,
 //    i18n.translateTree(elemento) lo traduce igual que al cargar.
 //  · Si falta una traducción, se queda en español.
 (function () {
   var param = new URLSearchParams(location.search).get('lang');
-  var DICTS = { en: window.I18N_EN, ca: window.I18N_CA, eu: window.I18N_EU };
+  var DICTS = { en: window.I18N_EN, ca: window.I18N_CA, eu: window.I18N_EU, gl: window.I18N_GL };
   var lang = Object.prototype.hasOwnProperty.call(DICTS, param) ? param : 'es';
   var dict = DICTS[lang] || {};
 
