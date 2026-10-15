@@ -74,4 +74,6 @@ window.I18N_EN = {
   'Controles compactos para ratón o grandes para pantalla táctil': 'Compact controls for a mouse or large ones for a touch screen',
   'Ordenador': 'Computer',
   'Tablet / Pizarra digital': 'Tablet / Interactive whiteboard',
+  // Sello de la zona de simulación (js/sello.js)
+  'Más simulaciones en simulaciencia.es': 'More simulations at simulaciencia.es'
 };
