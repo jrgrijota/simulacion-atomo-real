@@ -74,4 +74,6 @@ window.I18N_GL = {
   'Controles compactos para ratón o grandes para pantalla táctil': 'Controis compactos para rato ou grandes para pantalla táctil',
   'Ordenador': 'Ordenador',
   'Tablet / Pizarra digital': 'Tableta / Encerado dixital',
+  // Sello de la zona de simulación (js/sello.js)
+  'Más simulaciones en simulaciencia.es': 'Máis simulacións en simulaciencia.es'
 };

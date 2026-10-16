@@ -74,4 +74,6 @@ window.I18N_EU = {
   'Controles compactos para ratón o grandes para pantalla táctil': 'Kontrol trinkoak saguarentzat edo handiak ukipen-pantailarentzat',
   'Ordenador': 'Ordenagailua',
   'Tablet / Pizarra digital': 'Tableta / Arbel digitala',
+  // Sello de la zona de simulación (js/sello.js)
+  'Más simulaciones en simulaciencia.es': 'Simulazio gehiago simulaciencia.es webgunean'
 };
