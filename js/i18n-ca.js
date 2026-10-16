@@ -74,6 +74,8 @@ window.I18N_CA = {
   'Controles compactos para ratón o grandes para pantalla táctil': 'Controls compactes per a ratolí o grans per a pantalla tàctil',
   'Ordenador': 'Ordinador',
   'Tablet / Pizarra digital': 'Tauleta / Pissarra digital',
+  // Nombres de controles para lectores de pantalla
+  'Comparación a escala real': 'Comparació a escala real',
   // Sello de la zona de simulación (js/sello.js)
   'Más simulaciones en simulaciencia.es': 'Més simulacions a simulaciencia.es'
 };
