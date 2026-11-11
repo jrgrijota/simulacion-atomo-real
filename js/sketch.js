@@ -230,6 +230,31 @@ function setup() {
   setupUIEventListeners();
   resetJourney(); // estado inicial + pinta panel lateral y franja inferior
 
+  // Ajustes de la dirección (fichas del alumnado): ver js/parametros.js.
+  // «elemento» admite el símbolo o el nombre; «zoom» es el número de saltos ×10
+  // (positivo, acercar; negativo, alejar).
+  const NOMBRES = { hidrogeno: "H", "hidrógeno": "H", helio: "He", carbono: "C", oxigeno: "O", "oxígeno": "O",
+                    sodio: "Na", hierro: "Fe", oro: "Au", uranio: "U" };
+  aplicarParametrosUrl({
+    elemento:    (v) => urlParam.select("ui-element-select")((NOMBRES[v] || v).toLowerCase()),
+    zoom:        (v) => {
+      const n = parseInt(v, 10);
+      if (!isFinite(n)) return;
+      const id = n > 0 ? "ui-btn-zoom-in" : "ui-btn-zoom-out";
+      // Cada salto se anima: el siguiente se pulsa cuando ha terminado el anterior.
+      let quedan = Math.min(Math.abs(n), 4);
+      const paso = () => {
+        if (quedan <= 0) return;
+        if (zoomAnimDir !== 0) { setTimeout(paso, 100); return; }
+        document.getElementById(id).click();
+        quedan--;
+        setTimeout(paso, 100);
+      };
+      paso();
+    },
+    intermedias: urlParam.toggle("ui-show-intermediate", (c) => c.checked),
+  });
+
   // El contenedor puede cambiar de tamaño sin que cambie la ventana (al
   // reorganizarse el diseño en el móvil): el lienzo lo sigue.
   if (holder && window.ResizeObserver) {
