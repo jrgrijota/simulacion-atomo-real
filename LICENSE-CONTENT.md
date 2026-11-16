@@ -1,6 +1,6 @@
 # Licencia del contenido
 
-© 2026 Juan Ramón Grijota
+Autor: Juan Ramón Grijota (2026)
 
 - **Código fuente** (HTML, CSS, JavaScript): licencia [MIT](LICENSE).
 - **Contenido educativo** (textos, explicaciones, imágenes y diseño didáctico):
